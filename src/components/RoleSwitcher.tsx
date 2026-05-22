@@ -30,7 +30,11 @@ export default function RoleSwitcher({
       <div className="flex flex-wrap items-center gap-2">
         {/* Administrador */}
         <button
-          onClick={() => onSelectUser(allUsers.find(u => u.role === 'ADMIN') || null)}
+          onClick={() => {
+            const admin = allUsers.find(u => u.role === 'ADMIN');
+            const fallbackAdmin: User = { id: 'u-1', name: 'Bruno Reis', role: 'ADMIN', username: 'bruno.admin', status: 'ONLINE', completedCount: 22 };
+            onSelectUser(admin || fallbackAdmin);
+          }}
           className={`px-2.5 py-1.5 rounded font-medium flex items-center gap-1 transition-all cursor-pointer ${
             currentUser?.role === 'ADMIN' && currentUser.id !== 'public-portal'
               ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
@@ -43,7 +47,11 @@ export default function RoleSwitcher({
 
         {/* Recepcionista */}
         <button
-          onClick={() => onSelectUser(allUsers.find(u => u.role === 'RECEPCIONISTA') || null)}
+          onClick={() => {
+            const recep = allUsers.find(u => u.role === 'RECEPCIONISTA');
+            const fallbackRecep: User = { id: 'u-8', name: 'Fernanda Lima', role: 'RECEPCIONISTA', username: 'fernanda.recep', status: 'ONLINE', completedCount: 19 };
+            onSelectUser(recep || fallbackRecep);
+          }}
           className={`px-2.5 py-1.5 rounded font-medium flex items-center gap-1 transition-all cursor-pointer ${
             currentUser?.role === 'RECEPCIONISTA'
               ? 'bg-blue-600 text-white font-bold shadow-sm'
@@ -58,7 +66,8 @@ export default function RoleSwitcher({
         <button
           onClick={() => {
             const atendente = allUsers.find(u => u.role === 'ATENDENTE' && u.name === 'Juliana Souza') || allUsers.find(u => u.role === 'ATENDENTE');
-            onSelectUser(atendente || null);
+            const fallbackAtend: User = { id: 'u-2', name: 'Renan Silva', role: 'ATENDENTE', username: 'renan.atend', deskNumber: 'Guichê 01', status: 'DISPONIVEL', completedCount: 8 };
+            onSelectUser(atendente || fallbackAtend);
           }}
           className={`px-2.5 py-1.5 rounded font-medium flex items-center gap-1 transition-all cursor-pointer ${
             currentUser?.role === 'ATENDENTE'
@@ -74,7 +83,8 @@ export default function RoleSwitcher({
         <button
           onClick={() => {
             const vistoriador = allUsers.find(u => u.role === 'VISTORIADOR' && u.name === 'Tiago Mendes') || allUsers.find(u => u.role === 'VISTORIADOR');
-            onSelectUser(vistoriador || null);
+            const fallbackVist: User = { id: 'u-6', name: 'Tiago Mendes', role: 'VISTORIADOR', username: 'tiago.vist', deskNumber: 'Área B', status: 'EM_VISTORIA', completedCount: 5 };
+            onSelectUser(vistoriador || fallbackVist);
           }}
           className={`px-2.5 py-1.5 rounded font-medium flex items-center gap-1 transition-all cursor-pointer ${
             currentUser?.role === 'VISTORIADOR'

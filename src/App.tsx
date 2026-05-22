@@ -21,11 +21,18 @@ export default function App() {
   const [alerts, setAlerts] = useState<OperationalAlert[]>([]);
   
   // Perfil Ativo Simulado no workspace (Começamos como Admin por padrão para dar o wow-factor)
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>({
+    id: "u-1",
+    name: "Bruno Reis",
+    role: "ADMIN",
+    username: "bruno.admin",
+    status: "ONLINE",
+    completedCount: 22
+  });
   const [isPublicPortal, setIsPublicPortal] = useState(false);
   const [publicActiveClientId, setPublicActiveClientId] = useState<string>('c-9');
   const [isResetting, setIsResetting] = useState(false);
-  const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
+  const [isInitialLoadDone, setIsInitialLoadDone] = useState(true);
 
   // Navegação dentro do painel do Admin
   const [adminTab, setAdminTab] = useState<'DASHBOARD' | 'IMPORT' | 'USER_MANAGEMENT' | 'AUDIT_LOGS'>('DASHBOARD');
@@ -33,33 +40,55 @@ export default function App() {
   // Carregar dados de forma consolidada do servidor Node/Express
   const fetchAllData = async () => {
     try {
-      const [resClients, resUsers, resLogs, resMessages, resCalls, resAlerts] = await Promise.all([
-        fetch('/api/clients'),
-        fetch('/api/users'),
-        fetch('/api/logs'),
-        fetch('/api/messages'),
-        fetch('/api/tv-calls'),
-        fetch('/api/operational-alerts')
-      ]);
+      // Clientes
+      fetch('/api/clients')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setClients(data); })
+        .catch(err => console.warn("Erro ao buscar clientes:", err));
 
-      if (resClients.ok) setClients(await resClients.json());
-      if (resUsers.ok) {
-        const uData = await resUsers.json();
-        setUsers(uData);
-        // Atualizar o cadastro local se logado
-        if (currentUser && currentUser.id !== 'public-portal') {
-          const freshUser = uData.find((u: any) => u.id === currentUser.id);
-          if (freshUser) {
-            setCurrentUser(freshUser);
+      // Usuários
+      fetch('/api/users')
+        .then(res => res.ok ? res.json() : null)
+        .then(uData => {
+          if (uData) {
+            setUsers(uData);
+            // Atualizar o cadastro local se logado
+            if (currentUser && currentUser.id !== 'public-portal') {
+              const freshUser = uData.find((u: any) => u.id === currentUser.id);
+              if (freshUser) {
+                setCurrentUser(freshUser);
+              }
+            }
           }
-        }
-      }
-      if (resLogs.ok) setLogs(await resLogs.json());
-      if (resMessages.ok) setWhatsappMessages(await resMessages.json());
-      if (resCalls.ok) setActiveCalls(await resCalls.json());
-      if (resAlerts.ok) setAlerts(await resAlerts.json());
+        })
+        .catch(err => console.warn("Erro ao buscar usuários:", err));
+
+      // Logs de Auditoria
+      fetch('/api/logs')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setLogs(data); })
+        .catch(err => console.warn("Erro ao buscar logs:", err));
+
+      // Mensagens WhatsApp
+      fetch('/api/messages')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setWhatsappMessages(data); })
+        .catch(err => console.warn("Erro ao buscar mensagens:", err));
+
+      // Chamadas do Painel TV
+      fetch('/api/tv-calls')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setActiveCalls(data); })
+        .catch(err => console.warn("Erro ao buscar chamadas TV:", err));
+
+      // Alertas operacionais
+      fetch('/api/operational-alerts')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setAlerts(data); })
+        .catch(err => console.warn("Erro ao buscar alertas:", err));
+
     } catch (e) {
-      console.warn("Erro ao buscar base real-time do servidor Express", e);
+      console.warn("Erro na rotina de polling real-time:", e);
     }
   };
 
