@@ -599,6 +599,22 @@ app.post("/api/users", (req, res) => {
   res.json({ success: true, users });
 });
 
+// Excluir usuário do sistema
+app.delete("/api/users/:id", (req, res) => {
+  const { id } = req.params;
+  const userExist = users.find(u => u.id === id);
+  if (userExist) {
+    if (userExist.role === 'ADMIN' && users.filter(u => u.role === 'ADMIN').length <= 1) {
+      return res.status(400).json({ error: "ERRO: O sistema precisa de pelo menos 1 Administrador ativo." });
+    }
+    users = users.filter(u => u.id !== id);
+    logAction("Administrador", "ADMIN", "Usuário removido", `Usuário ${userExist.name} (${userExist.role}) foi excluído.`);
+    res.json({ success: true, users });
+  } else {
+    res.status(404).json({ error: "Usuário não encontrado" });
+  }
+});
+
 // Atualizar status de usuário/operador
 app.post("/api/users/:id/status", (req, res) => {
   const { id } = req.params;

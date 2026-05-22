@@ -9,7 +9,8 @@ import TvPanelView from './components/TvPanelView';
 import PublicPortalView from './components/PublicPortalView';
 import ImportView from './components/ImportView';
 import LogsView from './components/LogsView';
-import { Shield, ClipboardList, UserCheck, Eye, PhoneCall, HelpCircle, FileSpreadsheet, Layers, RefreshCw } from 'lucide-react';
+import UserManagementView from './components/UserManagementView';
+import { Shield, ClipboardList, UserCheck, Eye, PhoneCall, HelpCircle, FileSpreadsheet, Layers, RefreshCw, Users } from 'lucide-react';
 
 export default function App() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -27,7 +28,7 @@ export default function App() {
   const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
 
   // Navegação dentro do painel do Admin
-  const [adminTab, setAdminTab] = useState<'DASHBOARD' | 'IMPORT' | 'AUDIT_LOGS'>('DASHBOARD');
+  const [adminTab, setAdminTab] = useState<'DASHBOARD' | 'IMPORT' | 'USER_MANAGEMENT' | 'AUDIT_LOGS'>('DASHBOARD');
 
   // Carregar dados de forma consolidada do servidor Node/Express
   const fetchAllData = async () => {
@@ -261,6 +262,47 @@ export default function App() {
     }
   };
 
+  // Cadastrar/Editar usuário
+  const handleSaveUser = async (userData: Partial<User>): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+      if (response.ok) {
+        await fetchAllData();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  };
+
+  // Excluir usuário
+  const handleDeleteUser = async (userId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        await fetchAllData();
+        return true;
+      } else {
+        const err = await response.json();
+        if (err.error) {
+          alert(err.error);
+        }
+        return false;
+      }
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  };
+
   return (
     <div className="bg-slate-50 min-h-screen font-sans antialiased text-slate-800 flex flex-col justify-start">
       
@@ -320,6 +362,15 @@ export default function App() {
                   <Layers className="w-3.5 h-3.5" />
                   Auditoria de Ações
                 </button>
+                <button
+                  onClick={() => setAdminTab('USER_MANAGEMENT')}
+                  className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    adminTab === 'USER_MANAGEMENT' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  Gerenciar Usuários
+                </button>
               </div>
 
               <div className="text-slate-400 font-medium text-xxs hidden sm:inline">
@@ -350,6 +401,14 @@ export default function App() {
             {adminTab === 'AUDIT_LOGS' && (
               <LogsView
                 logs={logs}
+              />
+            )}
+            {adminTab === 'USER_MANAGEMENT' && (
+              <UserManagementView
+                users={users}
+                currentUser={currentUser}
+                onSaveUser={handleSaveUser}
+                onDeleteUser={handleDeleteUser}
               />
             )}
           </div>
