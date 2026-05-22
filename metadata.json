@@ -1,0 +1,6 @@
+{
+  "name": "Gestão de Entrega e Vistoria",
+  "description": "Sistema de gestão de filas de atendimento, painel de chamadas e vistorias de empreendimentos imobiliários em tempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
