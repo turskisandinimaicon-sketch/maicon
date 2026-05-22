@@ -8,7 +8,7 @@ import {
 interface UserManagementViewProps {
   users: User[];
   currentUser: User | null;
-  onSaveUser: (userData: Partial<User>) => Promise<boolean>;
+  onSaveUser: (userData: Partial<User>) => Promise<{ success: boolean; error?: string }>;
   onDeleteUser: (userId: string) => Promise<boolean>;
 }
 
@@ -77,15 +77,15 @@ export default function UserManagementView({
       payload.id = editingUser.id;
     }
 
-    const success = await onSaveUser(payload);
-    if (success) {
+    const res = await onSaveUser(payload);
+    if (res.success) {
       setSuccessMsg(editingUser ? 'Usuário atualizado com sucesso!' : 'Novo usuário cadastrado com sucesso!');
       setTimeout(() => {
         setIsFormOpen(false);
         setEditingUser(null);
       }, 1000);
     } else {
-      setErrorMsg('Ocorreu um erro ao salvar o usuário. Verifique se o username já está em uso.');
+      setErrorMsg(res.error || 'Ocorreu um erro ao salvar o usuário. Verifique se o username já está em uso.');
     }
   };
 

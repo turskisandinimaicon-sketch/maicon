@@ -292,21 +292,22 @@ export default function App() {
   };
 
   // Cadastrar/Editar usuário
-  const handleSaveUser = async (userData: Partial<User>): Promise<boolean> => {
+  const handleSaveUser = async (userData: Partial<User>): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       });
-      if (response.ok) {
+      const data = await response.json();
+      if (response.ok && data.success) {
         await fetchAllData();
-        return true;
+        return { success: true };
       }
-      return false;
-    } catch (e) {
+      return { success: false, error: data.error || 'Ocorreu um erro no servidor ao salvar.' };
+    } catch (e: any) {
       console.error(e);
-      return false;
+      return { success: false, error: e.message || 'Erro de conexão com o servidor.' };
     }
   };
 

@@ -578,9 +578,22 @@ app.get("/api/users", (req, res) => {
 // Cadastrar/Editar usuário
 app.post("/api/users", (req, res) => {
   const { id, name, role, username, deskNumber, status } = req.body;
+  
+  if (!username) {
+    return res.status(400).json({ error: "ERRO: O campo de nome de usuário é obrigatório." });
+  }
+
+  const normalizedUsername = username.trim().toLowerCase();
+  
+  // Verificar se o username já está em uso por outro usuário
+  const usernameExists = users.some(u => u.username.toLowerCase() === normalizedUsername && u.id !== id);
+  if (usernameExists) {
+    return res.status(400).json({ error: `ERRO: O nome de usuário '@${username}' já está em uso por outro operador.` });
+  }
+
   if (id) {
     // Editar
-    users = users.map(u => u.id === id ? { ...u, name, role, username, deskNumber, status: status || u.status } : u);
+    users = users.map(u => u.id === id ? { ...u, name, role, username: normalizedUsername, deskNumber, status: status || u.status } : u);
     logAction("Administrador", "ADMIN", "Usuário editado", `Usuário ${name} alterado com sucesso`);
   } else {
     // Criar
@@ -588,7 +601,7 @@ app.post("/api/users", (req, res) => {
       id: "u-" + generateId(),
       name,
       role,
-      username,
+      username: normalizedUsername,
       deskNumber,
       status: status || "DISPONIVEL",
       completedCount: 0
