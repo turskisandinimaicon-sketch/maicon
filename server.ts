@@ -393,71 +393,81 @@ app.get("/api/enterprises", (req, res) => {
 
 // Cadastrar ou editar um empreendimento
 app.post("/api/enterprises", (req, res) => {
-  const { id, name } = req.body;
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: "Nome do empreendimento é obrigatório." });
-  }
-
-  const normalizedName = name.trim();
-
-  if (id) {
-    const enterprise = enterprises.find(e => e.id === id);
-    if (!enterprise) {
-      return res.status(404).json({ error: "Empreendimento não encontrado." });
+  try {
+    const { id, name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "Nome do empreendimento é obrigatório." });
     }
 
-    const oldName = enterprise.name;
-    enterprise.name = normalizedName;
+    const normalizedName = name.trim();
 
-    // Renomear em cascata nos compradores ativos
-    clients.forEach(c => {
-      if (c.empreendimento === oldName) {
-        c.empreendimento = normalizedName;
+    if (id) {
+      const enterprise = enterprises.find(e => e.id === id);
+      if (!enterprise) {
+        return res.status(404).json({ error: "Empreendimento não encontrado." });
       }
-    });
 
-    // Se é o atual ativo nas configurações de branding, atualiza também
-    if (eventConfig.enterpriseName === oldName) {
-      eventConfig.enterpriseName = normalizedName;
+      const oldName = enterprise.name;
+      enterprise.name = normalizedName;
+
+      // Renomear em cascata nos compradores ativos
+      clients.forEach(c => {
+        if (c.empreendimento === oldName) {
+          c.empreendimento = normalizedName;
+        }
+      });
+
+      // Se é o atual ativo nas configurações de branding, atualiza também
+      if (eventConfig.enterpriseName === oldName) {
+        eventConfig.enterpriseName = normalizedName;
+      }
+
+      logAction("Administrador", "ADMIN", "Empreendimento editado", `Empreendimento alterado de "${oldName}" para "${normalizedName}"`);
+      res.json({ success: true, enterprises });
+    } else {
+      const exists = enterprises.some(e => e.name.toLowerCase() === normalizedName.toLowerCase());
+      if (exists) {
+        return res.status(400).json({ error: "Este empreendimento já possui cadastro." });
+      }
+
+      const newEnt: Enterprise = {
+        id: "ent-" + generateId(),
+        name: normalizedName
+      };
+      enterprises.push(newEnt);
+      logAction("Administrador", "ADMIN", "Empreendimento criado", `Novo empreendimento cadastrado: "${normalizedName}"`);
+      res.json({ success: true, enterprises });
     }
-
-    logAction("Administrador", "ADMIN", "Empreendimento editado", `Empreendimento alterado de "${oldName}" para "${normalizedName}"`);
-    res.json({ success: true, enterprises });
-  } else {
-    const exists = enterprises.some(e => e.name.toLowerCase() === normalizedName.toLowerCase());
-    if (exists) {
-      return res.status(400).json({ error: "Este empreendimento já possui cadastro." });
-    }
-
-    const newEnt: Enterprise = {
-      id: "ent-" + generateId(),
-      name: normalizedName
-    };
-    enterprises.push(newEnt);
-    logAction("Administrador", "ADMIN", "Empreendimento criado", `Novo empreendimento cadastrado: "${normalizedName}"`);
-    res.json({ success: true, enterprises });
+  } catch (err: any) {
+    console.error("Erro em POST /api/enterprises:", err);
+    res.status(500).json({ error: "Erro interno no servidor: " + (err.message || String(err)) });
   }
 });
 
 // Excluir um empreendimento
 app.delete("/api/enterprises/:id", (req, res) => {
-  const { id } = req.params;
-  const entIndex = enterprises.findIndex(e => e.id === id);
-  if (entIndex === -1) {
-    return res.status(404).json({ error: "Empreendimento não encontrado." });
+  try {
+    const { id } = req.params;
+    const entIndex = enterprises.findIndex(e => e.id === id);
+    if (entIndex === -1) {
+      return res.status(404).json({ error: "Empreendimento não encontrado." });
+    }
+
+    const entName = enterprises[entIndex].name;
+
+    // Bloquear exclusão se existirem clientes usando
+    const assignedCount = clients.filter(c => c.empreendimento === entName).length;
+    if (assignedCount > 0) {
+      return res.status(400).json({ error: `Impossível excluir. Existem ${assignedCount} compradores vinculados ao empreendimento "${entName}".` });
+    }
+
+    enterprises.splice(entIndex, 1);
+    logAction("Administrador", "ADMIN", "Empreendimento removido", `Empreendimento "${entName}" excluído.`);
+    res.json({ success: true, enterprises });
+  } catch (err: any) {
+    console.error("Erro em DELETE /api/enterprises:", err);
+    res.status(500).json({ error: "Erro interno no servidor: " + (err.message || String(err)) });
   }
-
-  const entName = enterprises[entIndex].name;
-
-  // Bloquear exclusão se existirem clientes usando
-  const assignedCount = clients.filter(c => c.empreendimento === entName).length;
-  if (assignedCount > 0) {
-    return res.status(400).json({ error: `Impossível excluir. Existem ${assignedCount} compradores vinculados ao empreendimento "${entName}".` });
-  }
-
-  enterprises.splice(entIndex, 1);
-  logAction("Administrador", "ADMIN", "Empreendimento removido", `Empreendimento "${entName}" excluído.`);
-  res.json({ success: true, enterprises });
 });
 
 // Obter todos os clientes
@@ -765,63 +775,68 @@ app.post("/api/users/:id/status", (req, res) => {
 
 // Importação JSON de clientes de planilha
 app.post("/api/clients/import", (req, res) => {
-  const { fileData } = req.body; // Array de objetos importados
-  if (!Array.isArray(fileData)) {
-    return res.status(400).json({ error: "Dados inválidos para importação." });
-  }
+  try {
+    const { fileData } = req.body; // Array de objetos importados
+    if (!Array.isArray(fileData)) {
+      return res.status(400).json({ error: "Dados inválidos para importação." });
+    }
 
-  let importedCount = 0;
-  let updatedCount = 0;
+    let importedCount = 0;
+    let updatedCount = 0;
 
-  fileData.forEach((row: any) => {
-    if (!row.nome || !row.cpf) return;
-    
-    // Procura CPF existente de forma robusta
-    const rawCpfClean = String(row.cpf).replace(/\D/g, '');
-    if (!rawCpfClean) return;
+    fileData.forEach((row: any) => {
+      if (!row || !row.nome || !row.cpf) return;
+      
+      // Procura CPF existente de forma robusta
+      const rawCpfClean = String(row.cpf).replace(/\D/g, '');
+      if (!rawCpfClean) return;
 
-    const clientExist = clients.find(c => {
-      if (!c.cpf) return false;
-      return String(c.cpf).replace(/\D/g, '') === rawCpfClean;
+      const clientExist = clients.find(c => {
+        if (!c.cpf) return false;
+        return String(c.cpf).replace(/\D/g, '') === rawCpfClean;
+      });
+
+      if (clientExist) {
+        // Atualizar dados cadastrais mantendo o status operacional de fila
+        clientExist.nome = row.nome;
+        clientExist.empreendimento = row.empreendimento || clientExist.empreendimento;
+        clientExist.bloco = row.bloco || clientExist.bloco;
+        clientExist.unidade = row.unidade || clientExist.unidade;
+        clientExist.telefone = row.telefone || clientExist.telefone;
+        clientExist.email = row.email || clientExist.email;
+        clientExist.statusContratual = row.statusContratual || clientExist.statusContratual;
+        if (row.observacoes) clientExist.observacoes = row.observacoes;
+        updatedCount++;
+      } else {
+        // Criar novo registro
+        const newClient: Client = {
+          id: "c-" + generateId(),
+          nome: row.nome,
+          cpf: row.cpf,
+          empreendimento: row.empreendimento || "Residencial Canto das Flores",
+          bloco: row.bloco || "Bloco A",
+          unidade: row.unidade || "Unidade Geral",
+          telefone: row.telefone || "(11) 99999-9999",
+          email: row.email || "contato@cliente.com",
+          statusContratual: row.statusContratual || "QUITADO",
+          status: "AGUARDANDO_RECEPCAO",
+          priority: row.priority || "NORMAL",
+          possuiProcurador: false,
+          possuiVistoriadorProprio: false,
+          liberadoParaVistoria: false,
+          documentos: []
+        };
+        clients.push(newClient);
+        importedCount++;
+      }
     });
 
-    if (clientExist) {
-      // Atualizar dados cadastrais mantendo o status operacional de fila
-      clientExist.nome = row.nome;
-      clientExist.empreendimento = row.empreendimento || clientExist.empreendimento;
-      clientExist.bloco = row.bloco || clientExist.bloco;
-      clientExist.unidade = row.unidade || clientExist.unidade;
-      clientExist.telefone = row.telefone || clientExist.telefone;
-      clientExist.email = row.email || clientExist.email;
-      clientExist.statusContratual = row.statusContratual || clientExist.statusContratual;
-      if (row.observacoes) clientExist.observacoes = row.observacoes;
-      updatedCount++;
-    } else {
-      // Criar novo registro
-      const newClient: Client = {
-        id: "c-" + generateId(),
-        nome: row.nome,
-        cpf: row.cpf,
-        empreendimento: row.empreendimento || "Residencial Canto das Flores",
-        bloco: row.bloco || "Bloco A",
-        unidade: row.unidade || "Unidade Geral",
-        telefone: row.telefone || "(11) 99999-9999",
-        email: row.email || "contato@cliente.com",
-        statusContratual: row.statusContratual || "QUITADO",
-        status: "AGUARDANDO_RECEPCAO",
-        priority: row.priority || "NORMAL",
-        possuiProcurador: false,
-        possuiVistoriadorProprio: false,
-        liberadoParaVistoria: false,
-        documentos: []
-      };
-      clients.push(newClient);
-      importedCount++;
-    }
-  });
-
-  logAction("Administrador", "ADMIN", "Importação Realizada", `Importados ${importedCount} novos registros, atualizados ${updatedCount} existentes`);
-  res.json({ success: true, importedCount, updatedCount, clients });
+    logAction("Administrador", "ADMIN", "Importação Realizada", `Importados ${importedCount} novos registros, atualizados ${updatedCount} existentes`);
+    res.json({ success: true, importedCount, updatedCount, clients });
+  } catch (err: any) {
+    console.error("Erro em POST /api/clients/import:", err);
+    res.status(500).json({ error: "Erro interno no processamento de importação: " + (err.message || String(err)) });
+  }
 });
 
 // Recepção: Marcar presença e inserir na fila de atendimento

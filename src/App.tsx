@@ -163,13 +163,28 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileData: importDataset })
       });
+      
       if (response.ok) {
         await fetchAllData();
         return true;
       }
+
+      // Se não for OK, tenta pegar o erro do JSON ou texto
+      let errorMessage = 'Formato inválido ou falha operacional no processamento.';
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } else {
+        const textText = await response.text();
+        errorMessage = `Retorno do Servidor (${response.status}): ${textText.substring(0, 150)}`;
+      }
+      
+      alert(`Servidor recusou a importação:\n${errorMessage}`);
       return false;
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert(`Falha de rede ou conexão ao tentar importar compradores:\n${e.message || String(e)}`);
       return false;
     }
   };
@@ -201,12 +216,22 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, name })
       });
-      const data = await response.json();
+      
+      let errorMessage = 'Ocorreu um erro ao salvar o empreendimento.';
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        errorMessage = data.error || errorMessage;
+      } else {
+        const textText = await response.text();
+        errorMessage = `Retorno do Servidor (${response.status}): ${textText.substring(0, 150)}`;
+      }
+
       if (response.ok) {
         await fetchAllData();
         return { success: true };
       }
-      return { success: false, error: data.error || 'Ocorreu um erro ao salvar o empreendimento.' };
+      return { success: false, error: errorMessage };
     } catch (e: any) {
       console.error(e);
       return { success: false, error: e.message || 'Erro de conexão com o servidor.' };
@@ -219,12 +244,22 @@ export default function App() {
       const response = await fetch(`/api/enterprises/${id}`, {
         method: 'DELETE'
       });
-      const data = await response.json();
+      
+      let errorMessage = 'Erro ao deletar o empreendimento.';
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        errorMessage = data.error || errorMessage;
+      } else {
+        const textText = await response.text();
+        errorMessage = `Retorno do Servidor (${response.status}): ${textText.substring(0, 150)}`;
+      }
+
       if (response.ok) {
         await fetchAllData();
         return { success: true };
       }
-      return { success: false, error: data.error || 'Erro ao deletar o empreendimento.' };
+      return { success: false, error: errorMessage };
     } catch (e: any) {
       console.error(e);
       return { success: false, error: e.message || 'Erro de conexão com o servidor.' };
