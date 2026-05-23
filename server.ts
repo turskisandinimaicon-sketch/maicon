@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { Client, User, AuditLog, WhatsappMessage, CallLog, OperationalAlert, DocumentAttachment, EventConfig } from "./src/types";
+import { Client, User, AuditLog, WhatsappMessage, CallLog, OperationalAlert, DocumentAttachment, EventConfig, Enterprise } from "./src/types";
 
 const app = express();
 const PORT = 3000;
@@ -319,6 +319,13 @@ let eventConfig: EventConfig = {
   eventDate: "23 de Maio de 2026"
 };
 
+let enterprises: Enterprise[] = [
+  { id: "ent-1", name: "Residencial Canto das Flores" },
+  { id: "ent-2", name: "Condomínio Belle Vue" },
+  { id: "ent-3", name: "Residencial Solar da Barra" },
+  { id: "ent-4", name: "Splendor Park Residence" }
+];
+
 // --- AUXILIARY FUNCTIONS ---
 function generateId() {
   return Math.random().toString(36).substring(2, 9);
@@ -377,6 +384,80 @@ app.post("/api/event-config", (req, res) => {
 
   logAction("Administrador", "ADMIN", "Configurações do Evento Atualizadas", `Empreendimento alterado para "${eventConfig.enterpriseName}"`);
   res.json({ success: true, eventConfig });
+});
+
+// Obter todos os empreendimentos cadastrados
+app.get("/api/enterprises", (req, res) => {
+  res.json(enterprises);
+});
+
+// Cadastrar ou editar um empreendimento
+app.post("/api/enterprises", (req, res) => {
+  const { id, name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Nome do empreendimento é obrigatório." });
+  }
+
+  const normalizedName = name.trim();
+
+  if (id) {
+    const enterprise = enterprises.find(e => e.id === id);
+    if (!enterprise) {
+      return res.status(404).json({ error: "Empreendimento não encontrado." });
+    }
+
+    const oldName = enterprise.name;
+    enterprise.name = normalizedName;
+
+    // Renomear em cascata nos compradores ativos
+    clients.forEach(c => {
+      if (c.empreendimento === oldName) {
+        c.empreendimento = normalizedName;
+      }
+    });
+
+    // Se é o atual ativo nas configurações de branding, atualiza também
+    if (eventConfig.enterpriseName === oldName) {
+      eventConfig.enterpriseName = normalizedName;
+    }
+
+    logAction("Administrador", "ADMIN", "Empreendimento editado", `Empreendimento alterado de "${oldName}" para "${normalizedName}"`);
+    res.json({ success: true, enterprises });
+  } else {
+    const exists = enterprises.some(e => e.name.toLowerCase() === normalizedName.toLowerCase());
+    if (exists) {
+      return res.status(400).json({ error: "Este empreendimento já possui cadastro." });
+    }
+
+    const newEnt: Enterprise = {
+      id: "ent-" + generateId(),
+      name: normalizedName
+    };
+    enterprises.push(newEnt);
+    logAction("Administrador", "ADMIN", "Empreendimento criado", `Novo empreendimento cadastrado: "${normalizedName}"`);
+    res.json({ success: true, enterprises });
+  }
+});
+
+// Excluir um empreendimento
+app.delete("/api/enterprises/:id", (req, res) => {
+  const { id } = req.params;
+  const entIndex = enterprises.findIndex(e => e.id === id);
+  if (entIndex === -1) {
+    return res.status(404).json({ error: "Empreendimento não encontrado." });
+  }
+
+  const entName = enterprises[entIndex].name;
+
+  // Bloquear exclusão se existirem clientes usando
+  const assignedCount = clients.filter(c => c.empreendimento === entName).length;
+  if (assignedCount > 0) {
+    return res.status(400).json({ error: `Impossível excluir. Existem ${assignedCount} compradores vinculados ao empreendimento "${entName}".` });
+  }
+
+  enterprises.splice(entIndex, 1);
+  logAction("Administrador", "ADMIN", "Empreendimento removido", `Empreendimento "${entName}" excluído.`);
+  res.json({ success: true, enterprises });
 });
 
 // Obter todos os clientes
@@ -599,6 +680,12 @@ app.post("/api/clients/reset", (req, res) => {
     logoIconName: "Building2",
     eventDate: "23 de Maio de 2026"
   };
+  enterprises = [
+    { id: "ent-1", name: "Residencial Canto das Flores" },
+    { id: "ent-2", name: "Condomínio Belle Vue" },
+    { id: "ent-3", name: "Residencial Solar da Barra" },
+    { id: "ent-4", name: "Splendor Park Residence" }
+  ];
   logAction("Administrador", "ADMIN", "Reset Geral", "Todos os dados foram redefinidos para os valores de fábrica");
   res.json({ message: "Reset completo realizado com sucesso", clients });
 });
@@ -690,8 +777,13 @@ app.post("/api/clients/import", (req, res) => {
     if (!row.nome || !row.cpf) return;
     
     // Procura CPF existente de forma robusta
-    const rawCpfClean = row.cpf.toString().replace(/\D/g, '');
-    const clientExist = clients.find(c => c.cpf.replace(/\D/g, '') === rawCpfClean);
+    const rawCpfClean = String(row.cpf).replace(/\D/g, '');
+    if (!rawCpfClean) return;
+
+    const clientExist = clients.find(c => {
+      if (!c.cpf) return false;
+      return String(c.cpf).replace(/\D/g, '') === rawCpfClean;
+    });
 
     if (clientExist) {
       // Atualizar dados cadastrais mantendo o status operacional de fila

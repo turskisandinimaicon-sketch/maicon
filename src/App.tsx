@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Client, AuditLog, WhatsappMessage, CallLog, OperationalAlert, PriorityType, EventConfig } from './types';
+import { User, Client, AuditLog, WhatsappMessage, CallLog, OperationalAlert, PriorityType, EventConfig, Enterprise } from './types';
 import RoleSwitcher from './components/RoleSwitcher';
 import DashboardView from './components/DashboardView';
 import RecepcaoView from './components/RecepcaoView';
@@ -26,6 +26,7 @@ export default function App() {
     logoIconName: "Building2",
     eventDate: "23 de Maio de 2026"
   });
+  const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
   
   // Perfil Ativo Simulado no workspace (Começamos como Admin por padrão para dar o wow-factor)
   const [currentUser, setCurrentUser] = useState<User | null>({
@@ -92,7 +93,12 @@ export default function App() {
         fetch('/api/event-config')
           .then(res => res.ok ? res.json() : null)
           .then(data => { if (data) setEventConfig(data); })
-          .catch(err => console.warn("Erro ao buscar configurações do evento:", err))
+          .catch(err => console.warn("Erro ao buscar configurações do evento:", err)),
+
+        fetch('/api/enterprises')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => { if (data) setEnterprises(data); })
+          .catch(err => console.warn("Erro ao buscar catálogo de empreendimentos:", err))
       ];
 
       await Promise.all(promises);
@@ -187,7 +193,44 @@ export default function App() {
     }
   };
 
-  // Recepção: Marcar presença e inserir cliente na fila de atendimento
+  // Criar ou Editar Empreendimento do Catálogo
+  const handleSaveEnterprise = async (id: string | null, name: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch('/api/enterprises', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        await fetchAllData();
+        return { success: true };
+      }
+      return { success: false, error: data.error || 'Ocorreu um erro ao salvar o empreendimento.' };
+    } catch (e: any) {
+      console.error(e);
+      return { success: false, error: e.message || 'Erro de conexão com o servidor.' };
+    }
+  };
+
+  // Excluir Empreendimento do Catálogo
+  const handleDeleteEnterprise = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/enterprises/${id}`, {
+        method: 'DELETE'
+      });
+      const data = await response.json();
+      if (response.ok) {
+        await fetchAllData();
+        return { success: true };
+      }
+      return { success: false, error: data.error || 'Erro ao deletar o empreendimento.' };
+    } catch (e: any) {
+      console.error(e);
+      return { success: false, error: e.message || 'Erro de conexão com o servidor.' };
+    }
+  };
+
   const handleCheckIn = async (clientId: string, possuiProcurador: boolean, priority: PriorityType, observacoes: string) => {
     try {
       const response = await fetch(`/api/clients/${clientId}/check-in`, {
@@ -454,6 +497,9 @@ export default function App() {
                 onImportData={handleImportData}
                 eventConfig={eventConfig}
                 onUpdateEventConfig={handleUpdateEventConfig}
+                enterprises={enterprises}
+                onSaveEnterprise={handleSaveEnterprise}
+                onDeleteEnterprise={handleDeleteEnterprise}
               />
             )}
             {adminTab === 'IMPORT' && (

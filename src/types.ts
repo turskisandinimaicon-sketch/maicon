@@ -141,3 +141,8 @@ export interface EventConfig {
   eventDate: string;
 }
 
+export interface Enterprise {
+  id: string;
+  name: string;
+}
+

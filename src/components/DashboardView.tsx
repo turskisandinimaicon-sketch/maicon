@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Client, User, AuditLog, WhatsappMessage, OperationalAlert, EventConfig } from '../types';
+import { Client, User, AuditLog, WhatsappMessage, OperationalAlert, EventConfig, Enterprise } from '../types';
 import { 
   Users, Clock, CheckCircle, TrendingUp, AlertTriangle, 
   RefreshCw, Check, CheckCircle2, AlertOctagon, HelpCircle, ArrowUpRight,
-  ShieldCheck, FileSpreadsheet, Plus, AlertCircle, Phone, Search, SlidersHorizontal
+  ShieldCheck, FileSpreadsheet, Plus, AlertCircle, Phone, Search, SlidersHorizontal,
+  Edit2, Trash2, Home, Key, Building, Award, Sparkles, Building2, Eye, Shield, Upload
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -18,6 +19,9 @@ interface DashboardViewProps {
   onImportData: (importDataset: any[]) => void;
   eventConfig?: EventConfig;
   onUpdateEventConfig?: (config: Partial<EventConfig>) => Promise<boolean>;
+  enterprises?: Enterprise[];
+  onSaveEnterprise?: (id: string | null, name: string) => Promise<{ success: boolean; error?: string }>;
+  onDeleteEnterprise?: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export default function DashboardView({
@@ -31,19 +35,29 @@ export default function DashboardView({
   onResetDemo,
   onImportData,
   eventConfig,
-  onUpdateEventConfig
+  onUpdateEventConfig,
+  enterprises = [],
+  onSaveEnterprise,
+  onDeleteEnterprise
 }: DashboardViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Estados locais para edição das configurações de Branding do Evento
   const [isConfiguringEvent, setIsConfiguringEvent] = useState(false);
+  const [activeConfigTab, setActiveConfigTab] = useState<'BRANDING' | 'CATALOG'>('BRANDING');
   const [tempEnterpriseName, setTempEnterpriseName] = useState(eventConfig?.enterpriseName || "Residencial Canto das Flores");
   const [tempLogoType, setTempLogoType] = useState<'ICON' | 'URL'>(eventConfig?.logoType || 'ICON');
   const [tempLogoUrl, setTempLogoUrl] = useState(eventConfig?.logoUrl || '');
   const [tempLogoIconName, setTempLogoIconName] = useState(eventConfig?.logoIconName || 'Building2');
   const [tempEventDate, setTempEventDate] = useState(eventConfig?.eventDate || '23 de Maio de 2026');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  // Estados locais para edição do catálogo de empreendimentos
+  const [editingEnterpriseId, setEditingEnterpriseId] = useState<string | null>(null);
+  const [editingEnterpriseName, setEditingEnterpriseName] = useState('');
+  const [newEnterpriseName, setNewEnterpriseName] = useState('');
+  const [isSavingEnterprise, setIsSavingEnterprise] = useState(false);
 
   React.useEffect(() => {
     if (eventConfig) {
@@ -54,6 +68,43 @@ export default function DashboardView({
       setTempEventDate(eventConfig.eventDate);
     }
   }, [eventConfig]);
+
+  const handleAddEnterprise = async () => {
+    if (!newEnterpriseName.trim() || !onSaveEnterprise) return;
+    setIsSavingEnterprise(true);
+    const result = await onSaveEnterprise(null, newEnterpriseName.trim());
+    setIsSavingEnterprise(false);
+    if (result.success) {
+      setNewEnterpriseName('');
+    } else {
+      alert(result.error || "Erro ao cadastrar empreendimento.");
+    }
+  };
+
+  const handleUpdateEnterpriseLocal = async (id: string) => {
+    if (!editingEnterpriseName.trim() || !onSaveEnterprise) return;
+    setIsSavingEnterprise(true);
+    const result = await onSaveEnterprise(id, editingEnterpriseName.trim());
+    setIsSavingEnterprise(false);
+    if (result.success) {
+      setEditingEnterpriseId(null);
+      setEditingEnterpriseName('');
+    } else {
+      alert(result.error || "Erro ao editar empreendimento.");
+    }
+  };
+
+  const handleDeleteEnterpriseLocal = async (id: string) => {
+    if (!onDeleteEnterprise) return;
+    if (confirm("Deseja realmente excluir este empreendimento do catálogo?")) {
+      setIsSavingEnterprise(true);
+      const result = await onDeleteEnterprise(id);
+      setIsSavingEnterprise(false);
+      if (!result.success) {
+        alert(result.error || "Erro ao excluir empreendimento.");
+      }
+    }
+  };
 
   const handleSaveEventConfigLocal = async () => {
     if (!onUpdateEventConfig) return;
@@ -115,15 +166,15 @@ export default function DashboardView({
       </div>
 
       {/* Seção de Configuração Dinâmica do Empreendimento Ativo */}
-      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 shadow-xxs">
+      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-5 shadow-xxs">
         {!isConfiguringEvent ? (
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-xxs flex items-center justify-center text-slate-700 font-bold">
+              <div className="h-12 w-12 bg-white border border-slate-200 rounded-lg shadow-xxs flex items-center justify-center p-1 text-slate-700 font-bold shrink-0">
                 {eventConfig?.logoType === 'URL' && eventConfig.logoUrl ? (
                   <img 
                     src={eventConfig.logoUrl} 
-                    className="h-7 w-7 object-contain rounded" 
+                    className="h-10 w-10 object-contain rounded" 
                     alt="Logo do Empreendimento"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
@@ -131,12 +182,12 @@ export default function DashboardView({
                     }}
                   />
                 ) : (
-                  <SlidersHorizontal className="w-5 h-5 text-indigo-650" />
+                  <Building2 className="w-6 h-6 text-indigo-650 animate-pulse" />
                 )}
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono">Empreendimento Ativo</span>
-                <h2 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                <h2 className="text-sm font-bold text-slate-800 uppercase flex flex-wrap items-center gap-2">
                   {eventConfig?.enterpriseName || "Residencial Canto das Flores"}
                   <span className="bg-slate-200/70 text-slate-600 text-[9px] px-1.5 py-0.2 rounded-full font-mono font-medium">
                     {eventConfig?.eventDate || "23 de Maio de 2026"}
@@ -148,154 +199,356 @@ export default function DashboardView({
             <button
               id="btn-edit-active-event-branding"
               type="button"
-              onClick={() => setIsConfiguringEvent(true)}
-              className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-250 cursor-pointer rounded-lg text-xxs font-bold text-slate-700 transition-colors flex items-center gap-1.5"
+              onClick={() => {
+                setIsConfiguringEvent(true);
+                setActiveConfigTab('BRANDING');
+              }}
+              className="px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-250 cursor-pointer rounded-lg text-xxs font-bold text-slate-705 transition-all shadow-xxs flex items-center gap-1.5 hover:border-slate-350"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
-              Editar Nome e Logo do Evento
+              Configurar Identidade e Catálogo
             </button>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="border-b border-slate-200 pb-2 flex justify-between items-center">
-              <h3 className="text-xs font-bold text-slate-705 uppercase tracking-wider flex items-center gap-1">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
-                Configurações Visuais do Evento (Painel TV & Portal)
-              </h3>
-              <span className="text-[10px] text-gray-400">Alterações refletem no painel da TV e login do cliente</span>
+            {/* Header com Abas */}
+            <div className="border-b border-slate-200 pb-0.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveConfigTab('BRANDING')}
+                  className={`pb-2.5 px-1 font-bold text-xs uppercase cursor-pointer transition-all flex items-center gap-1.5 ${
+                    activeConfigTab === 'BRANDING' 
+                      ? 'border-b-2 border-indigo-600 text-indigo-700' 
+                      : 'text-slate-400 hover:text-slate-650'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  Identidade do Evento Ativo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveConfigTab('CATALOG')}
+                  className={`pb-2.5 px-1 font-bold text-xs uppercase cursor-pointer transition-all flex items-center gap-1.5 ${
+                    activeConfigTab === 'CATALOG' 
+                      ? 'border-b-2 border-indigo-600 text-indigo-700' 
+                      : 'text-slate-400 hover:text-slate-650'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  Catálogo de Empreendimentos ({enterprises.length})
+                </button>
+              </div>
+              <span className="text-[9px] text-gray-400 font-mono hidden md:inline">Configurações visuais refletidas em tempo real</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Nome do Empreendimento */}
-              <div>
-                <label className="text-xxs font-bold text-slate-600 uppercase block pb-1.5">Nome do Empreendimento ou Evento</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Condomínio Belle Vue"
-                  value={tempEnterpriseName}
-                  onChange={(e) => setTempEnterpriseName(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
-                />
-              </div>
-
-              {/* Data do Evento */}
-              <div>
-                <label className="text-xxs font-bold text-slate-600 uppercase block pb-1.5 font-mono">Data do Congresso de Chaves</label>
-                <input
-                  type="text"
-                  placeholder="Ex: 23 de Maio de 2026"
-                  value={tempEventDate}
-                  onChange={(e) => setTempEventDate(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
-                />
-              </div>
-
-              {/* Tipo de Logo */}
-              <div>
-                <label className="text-xxs font-bold text-slate-600 uppercase block pb-1.5">Origem da Logo / Identidade</label>
-                <div className="flex gap-2 p-0.5 bg-white border border-gray-300 rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => setTempLogoType('ICON')}
-                    className={`flex-1 py-1 rounded-md font-bold text-xxs transition-colors cursor-pointer ${tempLogoType === 'ICON' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                  >
-                    Ícone do Sistema
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTempLogoType('URL')}
-                    className={`flex-1 py-1 rounded-md font-bold text-xxs transition-colors cursor-pointer ${tempLogoType === 'URL' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                  >
-                    Link / Imagem Externa
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Configuração do Logotipo de acordo com a seleção */}
-            <div className="p-3 bg-white border border-slate-200 rounded-lg">
-              {tempLogoType === 'ICON' ? (
-                <div>
-                  <label className="text-xxs font-bold text-slate-500 uppercase block pb-2">Selecione o Ícone do Empreendimento</label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { name: 'Building2', label: 'Condomínio (Building2)' },
-                      { name: 'Home', label: 'Residência (Home)' },
-                      { name: 'Key', label: 'Chave Coroa (Key)' },
-                      { name: 'Building', label: 'Corporativo (Building)' },
-                      { name: 'Award', label: 'Premium (Award)' },
-                      { name: 'Sparkles', label: 'Inovador (Sparkles)' }
-                    ].map(item => (
-                      <button
-                        key={item.name}
-                        type="button"
-                        onClick={() => setTempLogoIconName(item.name)}
-                        className={`px-3 py-1.5 rounded-lg border text-xxs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                          tempLogoIconName === item.name 
-                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300 ring-1 ring-indigo-200' 
-                            : 'bg-white text-slate-600 border-slate-250 hover:bg-slate-50'
-                        }`}
+            {/* Renderizar as Abas correspondentes */}
+            {activeConfigTab === 'BRANDING' ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Nome do Empreendimento (Seletor do Catálogo) */}
+                  <div>
+                    <label className="text-xxs font-bold text-slate-650 uppercase block pb-1.5">Empreendimento Ativo</label>
+                    <div className="space-y-1.5">
+                      <select
+                        value={tempEnterpriseName}
+                        onChange={(e) => setTempEnterpriseName(e.target.value)}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                        {item.label}
+                        <option value="">-- Selecione do Catálogo --</option>
+                        {enterprises.map(e => (
+                          <option key={e.id} value={e.name}>{e.name}</option>
+                        ))}
+                      </select>
+                      <p className="text-[9px] text-slate-400 block">
+                        Não encontrou? Cadastre na aba <button type="button" onClick={() => setActiveConfigTab('CATALOG')} className="text-indigo-600 font-bold hover:underline">Catálogo de Empreendimentos</button>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Data do Evento */}
+                  <div>
+                    <label className="text-xxs font-bold text-slate-655 uppercase block pb-1.5 font-mono">Data do Congresso de Chaves</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 23 de Maio de 2026"
+                      value={tempEventDate}
+                      onChange={(e) => setTempEventDate(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
+                    />
+                  </div>
+
+                  {/* Tipo de Logo */}
+                  <div>
+                    <label className="text-xxs font-bold text-slate-655 uppercase block pb-1.5">Origem da Logo / Identidade</label>
+                    <div className="flex gap-2 p-0.5 bg-white border border-gray-300 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => setTempLogoType('ICON')}
+                        className={`flex-1 py-1 rounded-md font-bold text-xxs transition-colors cursor-pointer ${tempLogoType === 'ICON' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        Ícone do Sistema
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => setTempLogoType('URL')}
+                        className={`flex-1 py-1 rounded-md font-bold text-xxs transition-colors cursor-pointer ${tempLogoType === 'URL' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        Importar Logomarca
+                      </button>
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <div>
-                  <label className="text-xxs font-bold text-slate-500 uppercase block pb-1.5">Insira o link (URL Completa) de uma Imagem de Logo na Web</label>
-                  <input
-                    type="url"
-                    placeholder="https://exemplo.com/logo.png"
-                    value={tempLogoUrl}
-                    onChange={(e) => setTempLogoUrl(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-mono"
-                  />
-                  <span className="text-[10px] text-gray-400 block pt-1">Insira um link HTTP/HTTPS direto para um arquivo JPEG, PNG ou SVG válido com fundo transparente.</span>
-                </div>
-              )}
-            </div>
 
-            {/* Ações */}
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsConfiguringEvent(false);
-                  // Restaurar do estado atual
-                  if (eventConfig) {
-                    setTempEnterpriseName(eventConfig.enterpriseName);
-                    setTempLogoType(eventConfig.logoType);
-                    setTempLogoUrl(eventConfig.logoUrl);
-                    setTempLogoIconName(eventConfig.logoIconName);
-                    setTempEventDate(eventConfig.eventDate);
-                  }
-                }}
-                disabled={isSavingConfig}
-                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-xxs font-bold text-slate-700 rounded-lg transition-colors cursor-pointer"
-              >
-                Voltar / Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveEventConfigLocal}
-                disabled={isSavingConfig || !tempEnterpriseName.trim()}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-800 text-xxs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                {isSavingConfig ? (
-                  <>
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    Aplicar no Painel da TV & Portal
-                  </>
-                )}
-              </button>
-            </div>
+                {/* Configuração do Logotipo de acordo com a seleção */}
+                <div className="p-3 bg-white border border-slate-200 rounded-lg">
+                  {tempLogoType === 'ICON' ? (
+                    <div>
+                      <label className="text-xxs font-bold text-slate-500 uppercase block pb-2">Selecione o Ícone Representativo</label>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { name: 'Building2', label: 'Condomínio (Building2)' },
+                          { name: 'Home', label: 'Residência (Home)' },
+                          { name: 'Key', label: 'Chave Coroa (Key)' },
+                          { name: 'Building', label: 'Corporativo (Building)' },
+                          { name: 'Award', label: 'Premium (Award)' },
+                          { name: 'Sparkles', label: 'Inovador (Sparkles)' }
+                        ].map(item => (
+                          <button
+                            key={item.name}
+                            type="button"
+                            onClick={() => setTempLogoIconName(item.name)}
+                            className={`px-3 py-1.5 rounded-lg border text-xxs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                              tempLogoIconName === item.name 
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-300 ring-1 ring-indigo-200' 
+                                : 'bg-white text-slate-600 border-slate-250 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xxs font-bold text-slate-505 uppercase block pb-1.5">Link direto de Imagem Web (Opcional)</label>
+                          <input
+                            type="url"
+                            placeholder="https://exemplo.com/logo-construtora.png"
+                            value={tempLogoUrl.startsWith('data:image') ? '' : tempLogoUrl}
+                            onChange={(e) => setTempLogoUrl(e.target.value)}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xxs font-bold text-slate-505 uppercase block pb-1.5">Fazer Carregamento do Arquivo</label>
+                          <div className="flex items-center gap-2">
+                            <label className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer hover:border-indigo-400 transition-colors">
+                              <Upload className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <span>Importar Imagem Locas (PNG, JPG, SVG)...</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      if (typeof reader.result === 'string') {
+                                        setTempLogoUrl(reader.result);
+                                      }
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {tempLogoUrl && (
+                        <div className="flex items-center gap-4 bg-slate-50 p-2.5 border border-slate-200 rounded-lg">
+                          <div className="h-16 w-16 rounded-lg bg-white border border-slate-200 flex items-center justify-center p-1.5 shadow-xxs shrink-0 overflow-hidden">
+                            <img src={tempLogoUrl} className="max-h-full max-w-full object-contain" alt="Imagem Carregada" referrerPolicy="no-referrer" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <strong className="block text-xs font-bold text-slate-705">Logomarca Carregada com sucesso!</strong>
+                            <p className="text-[10px] text-gray-400 truncate font-mono">
+                              {tempLogoUrl.startsWith('data:') ? 'Arquivo Convertido para Base64 Local' : tempLogoUrl}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setTempLogoUrl('')}
+                              className="text-rose-600 hover:text-rose-700 font-bold text-xxs mt-0.5"
+                            >
+                              Remover Logo / Limpar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <p className="text-[10px] text-slate-400 font-sans">
+                        Tip: Logos com fundo transparente fornecem uma estética mais lapidada e corporativa no painel gigante.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botões operacionais de gravação */}
+                <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsConfiguringEvent(false);
+                      if (eventConfig) {
+                        setTempEnterpriseName(eventConfig.enterpriseName);
+                        setTempLogoType(eventConfig.logoType);
+                        setTempLogoUrl(eventConfig.logoUrl);
+                        setTempLogoIconName(eventConfig.logoIconName);
+                        setTempEventDate(eventConfig.eventDate);
+                      }
+                    }}
+                    disabled={isSavingConfig}
+                    className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-xxs font-bold text-slate-700 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Fechar / Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveEventConfigLocal}
+                    disabled={isSavingConfig || !tempEnterpriseName.trim()}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-800 text-xxs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  >
+                    {isSavingConfig ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        Aplicar Identidade Ativa
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* TAB 2: GERENCIAMENTO DE CATÁLOGO */
+              <div className="space-y-4">
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <h4 className="text-xxs font-bold text-slate-500 uppercase tracking-wider block pb-2">Cadastrar Novo Empreendimento no Catálogo</h4>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Ex: Splendor Park Residence II"
+                      value={newEnterpriseName}
+                      onChange={(e) => setNewEnterpriseName(e.target.value)}
+                      disabled={isSavingEnterprise}
+                      className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddEnterprise}
+                      disabled={isSavingEnterprise || !newEnterpriseName.trim()}
+                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white text-xxs font-bold rounded-lg transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Cadastrar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center text-xxs font-bold text-slate-505 uppercase tracking-wider font-mono">
+                    <span>Nome Cadastrado</span>
+                    <span>Ações</span>
+                  </div>
+
+                  {enterprises.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 font-medium">
+                      Nenhum empreendimento cadastrado no catálogo. Insira um acima para iniciar.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 max-h-[220px] overflow-y-auto">
+                      {enterprises.map((e) => (
+                        <div key={e.id} className="px-4 py-2.5 flex items-center justify-between text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors">
+                          {editingEnterpriseId === e.id ? (
+                            <div className="flex items-center gap-2 flex-1 mr-4">
+                              <input
+                                type="text"
+                                value={editingEnterpriseName}
+                                onChange={(e) => setEditingEnterpriseName(e.target.value)}
+                                className="flex-1 bg-white border border-indigo-400 rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-indigo-300 outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateEnterpriseLocal(e.id)}
+                                disabled={isSavingEnterprise || !editingEnterpriseName.trim()}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
+                              >
+                                Gravar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingEnterpriseId(null)}
+                                className="bg-slate-100 hover:bg-slate-250 text-slate-650 rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="truncate pr-4 font-semibold text-slate-700">{e.name}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingEnterpriseId(e.id);
+                                    setEditingEnterpriseName(e.name);
+                                  }}
+                                  className="p-1 hover:bg-slate-100/80 rounded text-slate-600 hover:text-indigo-600 cursor-pointer"
+                                  title="Editar Nome do Empreendimento"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteEnterpriseLocal(e.id)}
+                                  className="p-1 hover:bg-slate-100/80 rounded text-rose-600 hover:text-rose-750 cursor-pointer"
+                                  title="Excluir do Catálogo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Back button */}
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsConfiguringEvent(false);
+                    }}
+                    className="px-4 py-1.5 bg-slate-100 hover:bg-slate-205 text-xxs font-bold text-slate-700 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Fechar Painel de Configurações
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

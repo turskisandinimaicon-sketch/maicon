@@ -14,13 +14,13 @@ interface TvPanelViewProps {
 
 const renderLogoIcon = (iconName: string) => {
   switch (iconName) {
-    case 'Home': return <Home className="w-5 h-5 text-rose-500" />;
-    case 'Key': return <Key className="w-5 h-5 text-rose-500" />;
-    case 'Building': return <Building className="w-5 h-5 text-rose-500" />;
-    case 'Award': return <Award className="w-5 h-5 text-rose-500" />;
-    case 'ShieldCheck': return <ShieldCheck className="w-5 h-5 text-rose-500" />;
-    case 'Sparkles': return <Sparkles className="w-5 h-5 text-rose-500" />;
-    default: return <Building2 className="w-5 h-5 text-rose-500" />;
+    case 'Home': return <Home className="w-10 h-10 text-rose-500" />;
+    case 'Key': return <Key className="w-10 h-10 text-rose-500" />;
+    case 'Building': return <Building className="w-10 h-10 text-rose-500" />;
+    case 'Award': return <Award className="w-10 h-10 text-rose-500" />;
+    case 'ShieldCheck': return <ShieldCheck className="w-10 h-10 text-rose-500" />;
+    case 'Sparkles': return <Sparkles className="w-10 h-10 text-rose-500" />;
+    default: return <Building2 className="w-10 h-10 text-rose-500" />;
   }
 };
 
@@ -88,11 +88,11 @@ export default function TvPanelView({ activeCalls, clients, eventConfig }: TvPan
       <div className="flex flex-col md:flex-row justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-xs gap-4">
         {/* Branding Empreendimento */}
         <div className="flex items-center gap-3.5 w-full md:w-auto">
-          <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center shrink-0">
+          <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center shrink-0">
             {eventConfig && eventConfig.logoType === 'URL' && eventConfig.logoUrl ? (
               <img 
                 src={eventConfig.logoUrl} 
-                className="h-10 w-10 object-contain rounded-md" 
+                className="h-16 w-16 object-contain rounded-md" 
                 alt="Logo do Empreendimento"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
