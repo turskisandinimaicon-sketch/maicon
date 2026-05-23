@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Client, AuditLog, WhatsappMessage, CallLog, OperationalAlert, PriorityType } from './types';
+import { User, Client, AuditLog, WhatsappMessage, CallLog, OperationalAlert, PriorityType, EventConfig } from './types';
 import RoleSwitcher from './components/RoleSwitcher';
 import DashboardView from './components/DashboardView';
 import RecepcaoView from './components/RecepcaoView';
@@ -19,6 +19,13 @@ export default function App() {
   const [activeCalls, setActiveCalls] = useState<CallLog[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsappMessage[]>([]);
   const [alerts, setAlerts] = useState<OperationalAlert[]>([]);
+  const [eventConfig, setEventConfig] = useState<EventConfig>({
+    enterpriseName: "Residencial Canto das Flores",
+    logoUrl: "",
+    logoType: "ICON",
+    logoIconName: "Building2",
+    eventDate: "23 de Maio de 2026"
+  });
   
   // Perfil Ativo Simulado no workspace (Começamos como Admin por padrão para dar o wow-factor)
   const [currentUser, setCurrentUser] = useState<User | null>({
@@ -40,53 +47,55 @@ export default function App() {
   // Carregar dados de forma consolidada do servidor Node/Express
   const fetchAllData = async () => {
     try {
-      // Clientes
-      fetch('/api/clients')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => { if (data) setClients(data); })
-        .catch(err => console.warn("Erro ao buscar clientes:", err));
+      const promises = [
+        fetch('/api/clients')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => { if (data) setClients(data); })
+          .catch(err => console.warn("Erro ao buscar clientes:", err)),
 
-      // Usuários
-      fetch('/api/users')
-        .then(res => res.ok ? res.json() : null)
-        .then(uData => {
-          if (uData) {
-            setUsers(uData);
-            // Atualizar o cadastro local se logado
-            if (currentUser && currentUser.id !== 'public-portal') {
-              const freshUser = uData.find((u: any) => u.id === currentUser.id);
-              if (freshUser) {
-                setCurrentUser(freshUser);
+        fetch('/api/users')
+          .then(res => res.ok ? res.json() : null)
+          .then(uData => {
+            if (uData) {
+              setUsers(uData);
+              // Atualizar o cadastro local se logado
+              if (currentUser && currentUser.id !== 'public-portal') {
+                const freshUser = uData.find((u: any) => u.id === currentUser.id);
+                if (freshUser) {
+                  setCurrentUser(freshUser);
+                }
               }
             }
-          }
-        })
-        .catch(err => console.warn("Erro ao buscar usuários:", err));
+          })
+          .catch(err => console.warn("Erro ao buscar usuários:", err)),
 
-      // Logs de Auditoria
-      fetch('/api/logs')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => { if (data) setLogs(data); })
-        .catch(err => console.warn("Erro ao buscar logs:", err));
+        fetch('/api/logs')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => { if (data) setLogs(data); })
+          .catch(err => console.warn("Erro ao buscar logs:", err)),
 
-      // Mensagens WhatsApp
-      fetch('/api/messages')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => { if (data) setWhatsappMessages(data); })
-        .catch(err => console.warn("Erro ao buscar mensagens:", err));
+        fetch('/api/messages')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => { if (data) setWhatsappMessages(data); })
+          .catch(err => console.warn("Erro ao buscar mensagens:", err)),
 
-      // Chamadas do Painel TV
-      fetch('/api/tv-calls')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => { if (data) setActiveCalls(data); })
-        .catch(err => console.warn("Erro ao buscar chamadas TV:", err));
+        fetch('/api/tv-calls')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => { if (data) setActiveCalls(data); })
+          .catch(err => console.warn("Erro ao buscar chamadas TV:", err)),
 
-      // Alertas operacionais
-      fetch('/api/operational-alerts')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => { if (data) setAlerts(data); })
-        .catch(err => console.warn("Erro ao buscar alertas:", err));
+        fetch('/api/operational-alerts')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => { if (data) setAlerts(data); })
+          .catch(err => console.warn("Erro ao buscar alertas:", err)),
 
+        fetch('/api/event-config')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => { if (data) setEventConfig(data); })
+          .catch(err => console.warn("Erro ao buscar configurações do evento:", err))
+      ];
+
+      await Promise.all(promises);
     } catch (e) {
       console.warn("Erro na rotina de polling real-time:", e);
     }
@@ -141,7 +150,7 @@ export default function App() {
   };
 
   // Importar Excel/CSV pasta
-  const handleImportData = async (importDataset: any[]) => {
+  const handleImportData = async (importDataset: any[]): Promise<boolean> => {
     try {
       const response = await fetch('/api/clients/import', {
         method: 'POST',
@@ -150,9 +159,31 @@ export default function App() {
       });
       if (response.ok) {
         await fetchAllData();
+        return true;
       }
+      return false;
     } catch (e) {
       console.error(e);
+      return false;
+    }
+  };
+
+  // Atualizar configurações globais do evento (Nome e Logo)
+  const handleUpdateEventConfig = async (config: Partial<EventConfig>): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/event-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (response.ok) {
+        await fetchAllData();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error(e);
+      return false;
     }
   };
 
@@ -359,6 +390,7 @@ export default function App() {
           <TvPanelView
             activeCalls={activeCalls}
             clients={clients}
+            eventConfig={eventConfig}
           />
         ) : currentUser.role === 'ADMIN' ? (
           /* COCKPIT DO ADMINISTRADOR */
@@ -420,6 +452,8 @@ export default function App() {
                 onValidateLaudo={handleValidateLaudo}
                 onResetDemo={handleResetDatabase}
                 onImportData={handleImportData}
+                eventConfig={eventConfig}
+                onUpdateEventConfig={handleUpdateEventConfig}
               />
             )}
             {adminTab === 'IMPORT' && (

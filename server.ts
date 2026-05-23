@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { Client, User, AuditLog, WhatsappMessage, CallLog, OperationalAlert, DocumentAttachment } from "./src/types";
+import { Client, User, AuditLog, WhatsappMessage, CallLog, OperationalAlert, DocumentAttachment, EventConfig } from "./src/types";
 
 const app = express();
 const PORT = 3000;
@@ -311,6 +311,14 @@ let activeCalls: CallLog[] = [
   { id: "call-2", clienteNome: "Guilherme Santos Prado", unidade: "Apto 501", localDestino: "Área B (Eng. Tiago)", responsavelNome: "Tiago Mendes", timestamp: "14:50", status: "ATENDIDO" }
 ];
 
+let eventConfig: EventConfig = {
+  enterpriseName: "Residencial Canto das Flores",
+  logoUrl: "",
+  logoType: "ICON",
+  logoIconName: "Building2",
+  eventDate: "23 de Maio de 2026"
+};
+
 // --- AUXILIARY FUNCTIONS ---
 function generateId() {
   return Math.random().toString(36).substring(2, 9);
@@ -352,6 +360,24 @@ function sendAutoWhatsapp(client: Client) {
 }
 
 // --- APIS ---
+
+// Obter configurações do evento ativo
+app.get("/api/event-config", (req, res) => {
+  res.json(eventConfig);
+});
+
+// Atualizar configurações do evento (Nome e Logo)
+app.post("/api/event-config", (req, res) => {
+  const { enterpriseName, logoUrl, logoType, logoIconName, eventDate } = req.body;
+  if (enterpriseName) eventConfig.enterpriseName = enterpriseName;
+  if (logoUrl !== undefined) eventConfig.logoUrl = logoUrl;
+  if (logoType) eventConfig.logoType = logoType;
+  if (logoIconName) eventConfig.logoIconName = logoIconName;
+  if (eventDate) eventConfig.eventDate = eventDate;
+
+  logAction("Administrador", "ADMIN", "Configurações do Evento Atualizadas", `Empreendimento alterado para "${eventConfig.enterpriseName}"`);
+  res.json({ success: true, eventConfig });
+});
 
 // Obter todos os clientes
 app.get("/api/clients", (req, res) => {
@@ -566,6 +592,13 @@ app.post("/api/clients/reset", (req, res) => {
     if (u.role === "VISTORIADOR") u.status = "DISPONIVEL";
   });
   activeCalls = [];
+  eventConfig = {
+    enterpriseName: "Residencial Canto das Flores",
+    logoUrl: "",
+    logoType: "ICON",
+    logoIconName: "Building2",
+    eventDate: "23 de Maio de 2026"
+  };
   logAction("Administrador", "ADMIN", "Reset Geral", "Todos os dados foram redefinidos para os valores de fábrica");
   res.json({ message: "Reset completo realizado com sucesso", clients });
 });

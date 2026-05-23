@@ -132,3 +132,12 @@ export interface OperationalAlert {
   description: string;
   createdAt: string;
 }
+
+export interface EventConfig {
+  enterpriseName: string;
+  logoUrl: string;
+  logoType: 'ICON' | 'URL';
+  logoIconName: string;
+  eventDate: string;
+}
+

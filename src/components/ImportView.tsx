@@ -9,7 +9,7 @@ import {
 
 interface ImportViewProps {
   clients: Client[];
-  onImportData: (fileData: any[]) => void;
+  onImportData: (fileData: any[]) => Promise<boolean>;
 }
 
 interface ColumnMapping {
@@ -28,6 +28,7 @@ export default function ImportView({ clients, onImportData }: ImportViewProps) {
   const [previewRows, setPreviewRows] = useState<any[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [isImported, setIsImported] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // --- Módulo de Copiar e Colar (CSV Manual) ---
   const [csvText, setCsvText] = useState('');
@@ -391,45 +392,58 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
     setIsImported(false);
   };
 
-  const handleApplyImport = () => {
-    if (previewRows.length === 0) return;
+  const handleApplyImport = async () => {
+    if (previewRows.length === 0 || isSaving) return;
+    setIsSaving(true);
     
-    // Converte os dados do preview para as chaves aceitas na API de clientes do backend
-    const sanitizeData = previewRows.map(row => {
-      // Normalização amigável de status contratual
-      let finalStatus: 'QUITADO' | 'PENDENTE_FINANCIAMENTO' | 'EM_ANALISE' = 'QUITADO';
-      const statusStr = String(row.statusContratual || '').toUpperCase();
-      if (statusStr.includes('PENDENTE') || statusStr.includes('FINANC') || statusStr.includes('FIN')) {
-        finalStatus = 'PENDENTE_FINANCIAMENTO';
-      } else if (statusStr.includes('ANALIS') || statusStr.includes('CONSER') || statusStr.includes('ANAL')) {
-        finalStatus = 'EM_ANALISE';
+    try {
+      // Converte os dados do preview para as chaves aceitas na API de clientes do backend
+      const sanitizeData = previewRows.map(row => {
+        // Normalização amigável de status contratual
+        let finalStatus: 'QUITADO' | 'PENDENTE_FINANCIAMENTO' | 'EM_ANALISE' = 'QUITADO';
+        const statusStr = String(row.statusContratual || '').toUpperCase();
+        if (statusStr.includes('PENDENTE') || statusStr.includes('FINANC') || statusStr.includes('FIN')) {
+          finalStatus = 'PENDENTE_FINANCIAMENTO';
+        } else if (statusStr.includes('ANALIS') || statusStr.includes('CONSER') || statusStr.includes('ANAL')) {
+          finalStatus = 'EM_ANALISE';
+        }
+
+        return {
+          nome: row.nome || 'Comprador Não Identificado',
+          cpf: row.cpf,
+          empreendimento: row.empreendimento || "Residencial Canto das Flores",
+          bloco: row.bloco || "Bloco A",
+          unidade: row.unidade || "Geral",
+          telefone: row.telefone || "(11) 99999-9999",
+          email: row.email || "contato@cliente.com",
+          statusContratual: finalStatus,
+        };
+      });
+
+      const success = await onImportData(sanitizeData);
+      
+      if (success) {
+        setIsImported(true);
+        
+        // Resetar estados
+        setCsvText('');
+        setPreviewRows([]);
+        setWarnings([]);
+        setUploadedFileName('');
+        setFileHeaders([]);
+        setFileDataRows([]);
+        setColumnMapping({});
+        
+        alert(`Importação concluída com sucesso! Processado lote de ${sanitizeData.length} compradores.`);
+      } else {
+        alert("Ocorreu um erro técnico ao registrar os compradores no servidor. Verifique sua conexão ou se o formato é válido.");
       }
-
-      return {
-        nome: row.nome || 'Comprador Não Identificado',
-        cpf: row.cpf,
-        empreendimento: row.empreendimento || "Residencial Canto das Flores",
-        bloco: row.bloco || "Bloco A",
-        unidade: row.unidade || "Geral",
-        telefone: row.telefone || "(11) 99999-9999",
-        email: row.email || "contato@cliente.com",
-        statusContratual: finalStatus,
-      };
-    });
-
-    onImportData(sanitizeData);
-    setIsImported(true);
-    
-    // Resetar estados
-    setCsvText('');
-    setPreviewRows([]);
-    setWarnings([]);
-    setUploadedFileName('');
-    setFileHeaders([]);
-    setFileDataRows([]);
-    setColumnMapping({});
-    
-    alert(`Importação concluída com sucesso! Processado lote de ${sanitizeData.length} compradores.`);
+    } catch (err) {
+      console.error(err);
+      alert("Houve uma falha de conexão com o servidor de banco de dados do evento.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Função para renderizar o exemplo da linha de dados para determinada coluna mapeada
@@ -772,16 +786,27 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
                     setPreviewRows([]);
                     setWarnings([]);
                   }}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 py-2.5 rounded-lg font-bold text-xs text-slate-700 cursor-pointer transition-colors"
+                  disabled={isSaving}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 py-2.5 rounded-lg font-bold text-xs text-slate-700 cursor-pointer transition-colors"
                 >
                   Cancelar Lote
                 </button>
                 <button
                   onClick={handleApplyImport}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 py-2.5 rounded-lg font-bold text-xs text-white cursor-pointer shadow-sm transition-colors flex items-center justify-center gap-1"
+                  disabled={isSaving}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:opacity-80 py-2.5 rounded-lg font-bold text-xs text-white cursor-pointer shadow-sm transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <Check className="w-4 h-4" />
-                  Salvar Compradores
+                  {isSaving ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Gravando Lote...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Salvar Compradores
+                    </>
+                  )}
                 </button>
               </div>
 

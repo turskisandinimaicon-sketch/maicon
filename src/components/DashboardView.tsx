@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Client, User, AuditLog, WhatsappMessage, OperationalAlert } from '../types';
+import { Client, User, AuditLog, WhatsappMessage, OperationalAlert, EventConfig } from '../types';
 import { 
   Users, Clock, CheckCircle, TrendingUp, AlertTriangle, 
   RefreshCw, Check, CheckCircle2, AlertOctagon, HelpCircle, ArrowUpRight,
@@ -16,6 +16,8 @@ interface DashboardViewProps {
   onValidateLaudo: (clientId: string) => void;
   onResetDemo: () => void;
   onImportData: (importDataset: any[]) => void;
+  eventConfig?: EventConfig;
+  onUpdateEventConfig?: (config: Partial<EventConfig>) => Promise<boolean>;
 }
 
 export default function DashboardView({
@@ -27,10 +29,49 @@ export default function DashboardView({
   onUpdateUserStatus,
   onValidateLaudo,
   onResetDemo,
-  onImportData
+  onImportData,
+  eventConfig,
+  onUpdateEventConfig
 }: DashboardViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // Estados locais para edição das configurações de Branding do Evento
+  const [isConfiguringEvent, setIsConfiguringEvent] = useState(false);
+  const [tempEnterpriseName, setTempEnterpriseName] = useState(eventConfig?.enterpriseName || "Residencial Canto das Flores");
+  const [tempLogoType, setTempLogoType] = useState<'ICON' | 'URL'>(eventConfig?.logoType || 'ICON');
+  const [tempLogoUrl, setTempLogoUrl] = useState(eventConfig?.logoUrl || '');
+  const [tempLogoIconName, setTempLogoIconName] = useState(eventConfig?.logoIconName || 'Building2');
+  const [tempEventDate, setTempEventDate] = useState(eventConfig?.eventDate || '23 de Maio de 2026');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  React.useEffect(() => {
+    if (eventConfig) {
+      setTempEnterpriseName(eventConfig.enterpriseName);
+      setTempLogoType(eventConfig.logoType);
+      setTempLogoUrl(eventConfig.logoUrl);
+      setTempLogoIconName(eventConfig.logoIconName);
+      setTempEventDate(eventConfig.eventDate);
+    }
+  }, [eventConfig]);
+
+  const handleSaveEventConfigLocal = async () => {
+    if (!onUpdateEventConfig) return;
+    setIsSavingConfig(true);
+    const success = await onUpdateEventConfig({
+      enterpriseName: tempEnterpriseName,
+      logoType: tempLogoType,
+      logoUrl: tempLogoUrl,
+      logoIconName: tempLogoIconName,
+      eventDate: tempEventDate
+    });
+    setIsSavingConfig(false);
+    if (success) {
+      setIsConfiguringEvent(false);
+    } else {
+      alert("Erro ao gravar novas configurações do empreendimento.");
+    }
+  };
 
   // Metricas baseadas em dados vivos
   const totalClients = clients.length;
@@ -71,6 +112,192 @@ export default function DashboardView({
             Transmissão Instantânea Ativa
           </span>
         </div>
+      </div>
+
+      {/* Seção de Configuração Dinâmica do Empreendimento Ativo */}
+      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 shadow-xxs">
+        {!isConfiguringEvent ? (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-xxs flex items-center justify-center text-slate-700 font-bold">
+                {eventConfig?.logoType === 'URL' && eventConfig.logoUrl ? (
+                  <img 
+                    src={eventConfig.logoUrl} 
+                    className="h-7 w-7 object-contain rounded" 
+                    alt="Logo do Empreendimento"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <SlidersHorizontal className="w-5 h-5 text-indigo-650" />
+                )}
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono">Empreendimento Ativo</span>
+                <h2 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                  {eventConfig?.enterpriseName || "Residencial Canto das Flores"}
+                  <span className="bg-slate-200/70 text-slate-600 text-[9px] px-1.5 py-0.2 rounded-full font-mono font-medium">
+                    {eventConfig?.eventDate || "23 de Maio de 2026"}
+                  </span>
+                </h2>
+              </div>
+            </div>
+            
+            <button
+              id="btn-edit-active-event-branding"
+              type="button"
+              onClick={() => setIsConfiguringEvent(true)}
+              className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-250 cursor-pointer rounded-lg text-xxs font-bold text-slate-700 transition-colors flex items-center gap-1.5"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+              Editar Nome e Logo do Evento
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="border-b border-slate-200 pb-2 flex justify-between items-center">
+              <h3 className="text-xs font-bold text-slate-705 uppercase tracking-wider flex items-center gap-1">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+                Configurações Visuais do Evento (Painel TV & Portal)
+              </h3>
+              <span className="text-[10px] text-gray-400">Alterações refletem no painel da TV e login do cliente</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Nome do Empreendimento */}
+              <div>
+                <label className="text-xxs font-bold text-slate-600 uppercase block pb-1.5">Nome do Empreendimento ou Evento</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Condomínio Belle Vue"
+                  value={tempEnterpriseName}
+                  onChange={(e) => setTempEnterpriseName(e.target.value)}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
+                />
+              </div>
+
+              {/* Data do Evento */}
+              <div>
+                <label className="text-xxs font-bold text-slate-600 uppercase block pb-1.5 font-mono">Data do Congresso de Chaves</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 23 de Maio de 2026"
+                  value={tempEventDate}
+                  onChange={(e) => setTempEventDate(e.target.value)}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
+                />
+              </div>
+
+              {/* Tipo de Logo */}
+              <div>
+                <label className="text-xxs font-bold text-slate-600 uppercase block pb-1.5">Origem da Logo / Identidade</label>
+                <div className="flex gap-2 p-0.5 bg-white border border-gray-300 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setTempLogoType('ICON')}
+                    className={`flex-1 py-1 rounded-md font-bold text-xxs transition-colors cursor-pointer ${tempLogoType === 'ICON' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    Ícone do Sistema
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTempLogoType('URL')}
+                    className={`flex-1 py-1 rounded-md font-bold text-xxs transition-colors cursor-pointer ${tempLogoType === 'URL' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    Link / Imagem Externa
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Configuração do Logotipo de acordo com a seleção */}
+            <div className="p-3 bg-white border border-slate-200 rounded-lg">
+              {tempLogoType === 'ICON' ? (
+                <div>
+                  <label className="text-xxs font-bold text-slate-500 uppercase block pb-2">Selecione o Ícone do Empreendimento</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: 'Building2', label: 'Condomínio (Building2)' },
+                      { name: 'Home', label: 'Residência (Home)' },
+                      { name: 'Key', label: 'Chave Coroa (Key)' },
+                      { name: 'Building', label: 'Corporativo (Building)' },
+                      { name: 'Award', label: 'Premium (Award)' },
+                      { name: 'Sparkles', label: 'Inovador (Sparkles)' }
+                    ].map(item => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => setTempLogoIconName(item.name)}
+                        className={`px-3 py-1.5 rounded-lg border text-xxs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          tempLogoIconName === item.name 
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300 ring-1 ring-indigo-200' 
+                            : 'bg-white text-slate-600 border-slate-250 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-xxs font-bold text-slate-500 uppercase block pb-1.5">Insira o link (URL Completa) de uma Imagem de Logo na Web</label>
+                  <input
+                    type="url"
+                    placeholder="https://exemplo.com/logo.png"
+                    value={tempLogoUrl}
+                    onChange={(e) => setTempLogoUrl(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-mono"
+                  />
+                  <span className="text-[10px] text-gray-400 block pt-1">Insira um link HTTP/HTTPS direto para um arquivo JPEG, PNG ou SVG válido com fundo transparente.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Ações */}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsConfiguringEvent(false);
+                  // Restaurar do estado atual
+                  if (eventConfig) {
+                    setTempEnterpriseName(eventConfig.enterpriseName);
+                    setTempLogoType(eventConfig.logoType);
+                    setTempLogoUrl(eventConfig.logoUrl);
+                    setTempLogoIconName(eventConfig.logoIconName);
+                    setTempEventDate(eventConfig.eventDate);
+                  }
+                }}
+                disabled={isSavingConfig}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-xxs font-bold text-slate-700 rounded-lg transition-colors cursor-pointer"
+              >
+                Voltar / Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEventConfigLocal}
+                disabled={isSavingConfig || !tempEnterpriseName.trim()}
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-800 text-xxs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                {isSavingConfig ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    Aplicar no Painel da TV & Portal
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid de Cards Métricas */}

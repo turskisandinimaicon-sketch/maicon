@@ -1,16 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { CallLog, Client } from '../types';
+import { CallLog, Client, EventConfig } from '../types';
 import { 
   Tv, Volume2, Users, ArrowBigRightDash, 
-  DoorClosed, Clock, Sparkles, AlertCircle, Building2
+  DoorClosed, Clock, Sparkles, AlertCircle, Building2,
+  Home, Key, Building, Award, ShieldCheck
 } from 'lucide-react';
 
 interface TvPanelViewProps {
   activeCalls: CallLog[];
   clients: Client[];
+  eventConfig?: EventConfig;
 }
 
-export default function TvPanelView({ activeCalls, clients }: TvPanelViewProps) {
+const renderLogoIcon = (iconName: string) => {
+  switch (iconName) {
+    case 'Home': return <Home className="w-5 h-5 text-rose-500" />;
+    case 'Key': return <Key className="w-5 h-5 text-rose-500" />;
+    case 'Building': return <Building className="w-5 h-5 text-rose-500" />;
+    case 'Award': return <Award className="w-5 h-5 text-rose-500" />;
+    case 'ShieldCheck': return <ShieldCheck className="w-5 h-5 text-rose-500" />;
+    case 'Sparkles': return <Sparkles className="w-5 h-5 text-rose-500" />;
+    default: return <Building2 className="w-5 h-5 text-rose-500" />;
+  }
+};
+
+export default function TvPanelView({ activeCalls, clients, eventConfig }: TvPanelViewProps) {
   const currentCall = activeCalls.find(c => c.status === 'CHAMANDO') || activeCalls[0];
   const previousCalls = activeCalls.filter(c => c.id !== currentCall?.id).slice(0, 4);
 
@@ -71,27 +85,54 @@ export default function TvPanelView({ activeCalls, clients }: TvPanelViewProps) 
     <div className="bg-slate-950 text-white min-h-[90vh] flex flex-col justify-between p-6">
       
       {/* Header do Painel */}
-      <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-rose-600/20 text-rose-500 rounded-lg">
-            <Tv className="w-5 h-5" />
+      <div className="flex flex-col md:flex-row justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-xs gap-4">
+        {/* Branding Empreendimento */}
+        <div className="flex items-center gap-3.5 w-full md:w-auto">
+          <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center shrink-0">
+            {eventConfig && eventConfig.logoType === 'URL' && eventConfig.logoUrl ? (
+              <img 
+                src={eventConfig.logoUrl} 
+                className="h-10 w-10 object-contain rounded-md" 
+                alt="Logo do Empreendimento"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              renderLogoIcon(eventConfig?.logoIconName || 'Building2')
+            )}
           </div>
           <div>
-            <h1 className="font-bold text-base tracking-tight uppercase">Painel de Chamadas Integradas</h1>
-            <span className="text-[10px] text-gray-400 font-mono">Evento Geral de Entrega de Unidades</span>
+            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest font-mono block">Painel de Chamadas Ativas</span>
+            <h1 className="font-extrabold text-lg sm:text-xl tracking-tight text-white uppercase select-none leading-tight">
+              {eventConfig?.enterpriseName || "Residencial Canto das Flores"}
+            </h1>
           </div>
         </div>
 
-        {/* Live Indicator */}
-        <div className="flex items-center gap-4">
-          <div className="text-right text-xxs text-gray-400">
-            <span className="block font-bold text-slate-300">Residencial Canto das Flores</span>
-            <span>22 de Maio de 2026</span>
+        {/* Live Indicator & Informações */}
+        <div className="flex items-center justify-between md:justify-end gap-5 w-full md:w-auto border-t md:border-t-0 border-slate-800/60 pt-3 md:pt-0">
+          <div className="text-left md:text-right text-xxs text-gray-400 space-y-0.5">
+            <span className="block font-bold text-slate-300 font-mono uppercase tracking-wider">
+              {eventConfig?.eventDate || "23 de Maio de 2026"}
+            </span>
+            <span className="flex items-center md:justify-end gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              CONGRESSO DE ENTREGA DE CHAVES
+            </span>
           </div>
-          <span className="bg-rose-600/30 text-rose-400 font-bold text-[10px] px-2.5 py-1 rounded border border-rose-500/30 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-            ONLINE
-          </span>
+          
+          <div className="flex items-center gap-2">
+            <span className="bg-rose-650/40 text-rose-450 font-bold text-[10px] px-2.5 py-1.5 rounded-lg border border-rose-500/30 flex items-center gap-1.5">
+              <Tv className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+              TV DISCORD
+            </span>
+            <span className="bg-emerald-600/25 text-emerald-400 font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg border border-emerald-500/20 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+              ATIVO
+            </span>
+          </div>
         </div>
       </div>
 
