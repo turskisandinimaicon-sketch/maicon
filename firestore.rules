@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Collection eventConfig
+    match /eventConfig/{configId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Collection enterprises
+    match /enterprises/{enterpriseId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Collection users
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Collection clients
+    match /clients/{clientId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Collection whatsappMessages
+    match /whatsappMessages/{messageId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Collection activeCalls
+    match /activeCalls/{callId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Collection auditLogs
+    match /auditLogs/{logId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Collection operationalAlerts
+    match /operationalAlerts/{alertId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+  }
+}

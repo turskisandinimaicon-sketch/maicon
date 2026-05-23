@@ -143,7 +143,7 @@ export default function DashboardView({
   // Filtro de lista
   const filteredClients = clients.filter(c => {
     const matchesSearch = c.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          c.cpf.includes(searchTerm) || 
+                          (c.cpf && c.cpf.includes(searchTerm)) || 
                           c.unidade.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' ? true : c.status === statusFilter;
     return matchesSearch && matchesStatus;

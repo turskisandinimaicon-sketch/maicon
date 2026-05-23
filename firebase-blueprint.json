@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "EventConfig": {
+      "title": "EventConfig",
+      "description": "Configuration event setup like enterprise name, logo and date.",
+      "type": "object",
+      "properties": {
+        "enterpriseName": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "logoType": { "type": "string", "enum": ["ICON", "URL"] },
+        "logoIconName": { "type": "string" },
+        "eventDate": { "type": "string" }
+      },
+      "required": ["enterpriseName", "logoType", "eventDate"]
+    },
+    "Enterprise": {
+      "title": "Enterprise",
+      "description": "Enterprise option definition for registry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "User": {
+      "title": "User",
+      "description": "App user descriptor representing operational agents.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "RECEPCIONISTA", "ATENDENTE", "VISTORIADOR"] },
+        "username": { "type": "string" },
+        "deskNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["ONLINE", "OFFLINE", "DISPONIVEL", "INDISPONIVEL", "EM_ATENDIMENTO", "EM_VISTORIA"] },
+        "completedCount": { "type": "number" }
+      },
+      "required": ["id", "name", "role", "username", "status", "completedCount"]
+    },
+    "DocumentAttachment": {
+      "title": "DocumentAttachment",
+      "description": "Client uploaded documents structure.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "size": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "category": { "type": "string", "enum": ["PROCURACAO", "RG", "CPF", "COMPROVANTE", "LAUDO_PARTICULAR", "OUTROS"] },
+        "url": { "type": "string" }
+      },
+      "required": ["id", "name", "uploadedAt", "category", "url"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Enterprise buyer and its interaction queue status.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "cpf": { "type": "string" },
+        "empreendimento": { "type": "string" },
+        "bloco": { "type": "string" },
+        "unidade": { "type": "string" },
+        "telefone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string" },
+        "statusContratual": { "type": "string", "enum": ["QUITADO", "PENDENTE_FINANCIAMENTO", "EM_ANALISE"] },
+        "status": { "type": "string" },
+        "observacoes": { "type": "string" },
+        "priority": { "type": "string", "enum": ["NORMAL", "IDOSO", "PCD", "GESTANTE"] },
+        "possuiProcurador": { "type": "boolean" },
+        "procuradorNome": { "type": "string" },
+        "procuradorCpf": { "type": "string" },
+        "possuiVistoriadorProprio": { "type": "boolean" },
+        "vistoriadorParticularNome": { "type": "string" },
+        "vistoriadorParticularCrea": { "type": "string" },
+        "liberadoParaVistoria": { "type": "boolean" },
+        "atendenteId": { "type": "string" },
+        "atendenteNome": { "type": "string" },
+        "guicheChamada": { "type": "string" },
+        "vistoriadorId": { "type": "string" },
+        "vistoriadorNome": { "type": "string" },
+        "tempoChegadaRecepcao": { "type": "string" },
+        "tempoEntradaFilaAtendimento": { "type": "string" },
+        "tempoInicioAtendimento": { "type": "string" },
+        "tempoFimAtendimento": { "type": "string" },
+        "tempoEntradaFilaVistoria": { "type": "string" },
+        "tempoInicioVistoria": { "type": "string" },
+        "tempoFimVistoria": { "type": "string" },
+        "tempoProcessoEncerrado": { "type": "string" },
+        "documentos": {
+          "type": "array",
+          "items": { "type": "object", "$ref": "DocumentAttachment" }
+        },
+        "satisfactonScore": { "type": "number" },
+        "satisfactonComment": { "type": "string" }
+      },
+      "required": ["id", "nome", "cpf", "unidade", "status", "priority", "possuiProcurador", "possuiVistoriadorProprio", "liberadoParaVistoria", "documentos"]
+    },
+    "WhatsappMessage": {
+      "title": "WhatsappMessage",
+      "description": "WhatsApp dispatch logger definition.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clienteId": { "type": "string" },
+        "clienteNome": { "type": "string" },
+        "telefone": { "type": "string" },
+        "mensagem": { "type": "string" },
+        "statusEnvio": { "type": "string", "enum": ["ENVIANDO", "ENTREGUE", "FALHOU"] },
+        "dataEnvio": { "type": "string" },
+        "dataEntrega": { "type": "string" }
+      },
+      "required": ["id", "clienteId", "clienteNome", "telefone", "mensagem", "statusEnvio", "dataEnvio"]
+    },
+    "CallLog": {
+      "title": "CallLog",
+      "description": "Active front tv receptionist call logs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clienteNome": { "type": "string" },
+        "unidade": { "type": "string" },
+        "localDestino": { "type": "string" },
+        "responsavelNome": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDENTE", "CHAMANDO", "ATENDIDO"] }
+      },
+      "required": ["id", "clienteNome", "unidade", "localDestino", "responsavelNome", "timestamp", "status"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Operational changes security auditing list.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "user": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "RECEPCIONISTA", "ATENDENTE", "VISTORIADOR"] },
+        "action": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "user", "role", "action", "details"]
+    },
+    "OperationalAlert": {
+      "title": "OperationalAlert",
+      "description": "Interactive warning cues triggers inside active floor monitor.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["QUEUE_CONGESTED", "CLIENT_WAITING_LONG", "OPERATOR_IDLE", "LONG_SERVICE"] },
+        "severity": { "type": "string", "enum": ["WARNING", "DANGER", "INFO"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "type", "severity", "title", "description", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/eventConfig/config": {
+      "schema": "EventConfig",
+      "description": "Global event visual options and setup info."
+    },
+    "/enterprises/{enterpriseId}": {
+      "schema": "Enterprise",
+      "description": "Registered construction operations."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles who perform check-ins, attendances or inspections."
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Core target buyers and state parameters."
+    },
+    "/whatsappMessages/{messageId}": {
+      "schema": "WhatsappMessage",
+      "description": "Dispatched messages tracker."
+    },
+    "/activeCalls/{callId}": {
+      "schema": "CallLog",
+      "description": "TV interface broadcast call items."
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Pristine logging history tracker."
+    },
+    "/operationalAlerts/{alertId}": {
+      "schema": "OperationalAlert",
+      "description": "Operational warnings tracked natively."
+    }
+  }
+}

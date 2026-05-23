@@ -42,7 +42,7 @@ export default function PublicPortalView({
     e.preventDefault();
     const cleanCpf = cpfLookup.replace(/\D/g, '');
     const found = clients.find(c => 
-      c.cpf.replace(/\D/g, '') === cleanCpf && 
+      c.cpf && c.cpf.replace(/\D/g, '') === cleanCpf && 
       c.unidade.toLowerCase().includes(unidadeLookup.toLowerCase())
     );
 

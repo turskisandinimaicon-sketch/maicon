@@ -1,5 +1,8 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
+import { initializeApp } from "firebase/app";
+import { initializeFirestore, setLogLevel, doc, getDoc, getDocs, setDoc, deleteDoc, collection } from "firebase/firestore";
 import { Client, User, AuditLog, WhatsappMessage, CallLog, OperationalAlert, DocumentAttachment, EventConfig, Enterprise } from "./src/types";
 
 const app = express();
@@ -8,6 +11,212 @@ const PORT = 3000;
 // Config limits for large attachments (Up to 20MB for PDF/Imgs as specified)
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
+
+// Firebase initialization settings
+let db: any = null;
+let useFirebase = false;
+
+// Try to initialize Firebase
+async function initFirebase() {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    try {
+      const rawConfig = fs.readFileSync(configPath, "utf8");
+      const firebaseConfig = JSON.parse(rawConfig);
+      
+      const firebaseApp = initializeApp(firebaseConfig);
+      
+      // Mute verbose Firebase console warnings/errors
+      setLogLevel('error');
+      
+      // Initialize firestore with forced long-polling to prevent persistent gRPC idle stream disconnects
+      db = initializeFirestore(firebaseApp, {
+        experimentalForceLongPolling: true,
+      }, firebaseConfig.firestoreDatabaseId);
+      
+      useFirebase = true;
+      console.log("[FIREBASE] Inicializado com sucesso no backend com experimentalForceLongPolling.");
+      
+      // Load current state from Firestore or seed it if empty
+      await syncFromFirestore();
+    } catch (err) {
+      console.error("[FIREBASE] Falha ao inicializar Firebase:", err);
+    }
+  } else {
+    console.log("[FIREBASE] firebase-applet-config.json não localizado. Operando apenas em fluxo in-memory.");
+  }
+}
+
+// Function to pull all data from Firestore, or push defaults if collections are empty
+async function syncFromFirestore() {
+  if (!useFirebase || !db) return;
+  
+  try {
+    console.log("[FIREBASE] Sincronizando dados com o Firestore...");
+    
+    // 1. Sync EventConfig
+    const configDocRef = doc(db, "eventConfig", "config");
+    const configSnapshot = await getDoc(configDocRef);
+    if (configSnapshot.exists()) {
+      eventConfig = configSnapshot.data() as EventConfig;
+    } else {
+      await setDoc(configDocRef, eventConfig);
+    }
+
+    // 2. Sync Enterprises
+    const enterprisesColl = collection(db, "enterprises");
+    const enterprisesSnapshot = await getDocs(enterprisesColl);
+    if (!enterprisesSnapshot.empty) {
+      enterprises = enterprisesSnapshot.docs.map(doc => doc.data() as Enterprise);
+    } else {
+      for (const ent of enterprises) {
+        await setDoc(doc(db, "enterprises", ent.id), ent);
+      }
+    }
+
+    // 3. Sync Users
+    const usersColl = collection(db, "users");
+    const usersSnapshot = await getDocs(usersColl);
+    if (!usersSnapshot.empty) {
+      users = usersSnapshot.docs.map(doc => doc.data() as User);
+    } else {
+      for (const user of users) {
+        await setDoc(doc(db, "users", user.id), user);
+      }
+    }
+
+    // 4. Sync Clients
+    const clientsColl = collection(db, "clients");
+    const clientsSnapshot = await getDocs(clientsColl);
+    if (!clientsSnapshot.empty) {
+      clients = clientsSnapshot.docs.map(doc => doc.data() as Client);
+    } else {
+      for (const cl of clients) {
+        await setDoc(doc(db, "clients", cl.id), cl);
+      }
+    }
+
+    // 5. Sync activeCalls
+    const callsColl = collection(db, "activeCalls");
+    const callsSnapshot = await getDocs(callsColl);
+    if (!callsSnapshot.empty) {
+      activeCalls = callsSnapshot.docs.map(doc => doc.data() as CallLog);
+    } else {
+      for (const call of activeCalls) {
+        await setDoc(doc(db, "activeCalls", call.id), call);
+      }
+    }
+
+    // 6. Sync whatsappMessages
+    const msgsColl = collection(db, "whatsappMessages");
+    const msgsSnapshot = await getDocs(msgsColl);
+    if (!msgsSnapshot.empty) {
+      whatsappMessages = msgsSnapshot.docs.map(doc => doc.data() as WhatsappMessage);
+    }
+
+    // 7. Sync auditLogs
+    const auditColl = collection(db, "auditLogs");
+    const auditSnapshot = await getDocs(auditColl);
+    if (!auditSnapshot.empty) {
+      auditLogs = auditSnapshot.docs.map(doc => doc.data() as AuditLog);
+    }
+
+    console.log("[FIREBASE] Sincronização concluída com sucesso.");
+  } catch (err) {
+    console.error("[FIREBASE] Erro ao sincronizar com o Firestore:", err);
+  }
+}
+
+// Helpers to save individual objects on actions
+async function saveEventConfig() {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "eventConfig", "config"), eventConfig);
+    } catch (err) {
+      console.error("Erro saving eventConfig: ", err);
+    }
+  }
+}
+
+async function saveEnterprise(ent: Enterprise) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "enterprises", ent.id), ent);
+    } catch (err) {
+      console.error("Erro saving enterprise: ", err);
+    }
+  }
+}
+
+async function deleteEnterpriseDoc(id: string) {
+  if (useFirebase && db) {
+    try {
+      await deleteDoc(doc(db, "enterprises", id));
+    } catch (err) {
+      console.error("Erro deleting enterprise: ", err);
+    }
+  }
+}
+
+async function saveUser(usr: User) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "users", usr.id), usr);
+    } catch (err) {
+      console.error("Erro saving user: ", err);
+    }
+  }
+}
+
+async function deleteUserDoc(id: string) {
+  if (useFirebase && db) {
+    try {
+      await deleteDoc(doc(db, "users", id));
+    } catch (err) {
+      console.error("Erro deleting user: ", err);
+    }
+  }
+}
+
+async function saveClient(c: Client) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "clients", c.id), c);
+    } catch (err) {
+      console.error("Erro saving client: ", err);
+    }
+  }
+}
+
+async function saveCall(call: CallLog) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "activeCalls", call.id), call);
+    } catch (err) {
+      console.error("Erro saving call: ", err);
+    }
+  }
+}
+
+async function saveMessage(msg: WhatsappMessage) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "whatsappMessages", msg.id), msg);
+    } catch (err) {
+      console.error("Erro saving message: ", err);
+    }
+  }
+}
+
+async function saveLog(log: AuditLog) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "auditLogs", log.id), log);
+    } catch (err) {
+      console.error("Erro saving log: ", err);
+    }
+  }
+}
 
 // --- BASE DE DADOS EM MEMÓRIA (PRÉ-POPULADA COM DADOS REALISTAS) ---
 let clients: Client[] = [
@@ -334,14 +543,16 @@ function generateId() {
 function logAction(user: string, role: string, action: string, details: string) {
   const now = new Date();
   const timeStr = now.toTimeString().split(' ')[0];
-  auditLogs.unshift({
+  const auditItem = {
     id: generateId(),
     timestamp: timeStr,
     user,
     role: role as any,
     action,
     details
-  });
+  };
+  auditLogs.unshift(auditItem);
+  saveLog(auditItem);
 }
 
 // Simulador de envio de Whatsapp automático
@@ -362,6 +573,7 @@ function sendAutoWhatsapp(client: Client) {
   };
 
   whatsappMessages.unshift(customMessage);
+  saveMessage(customMessage);
   logAction("Sistema WhatsApp", "ADMIN", "WhatsApp Enviado", `Notificação enviada para ${client.nome} (${client.telefone})`);
 }
 
@@ -373,7 +585,7 @@ app.get("/api/event-config", (req, res) => {
 });
 
 // Atualizar configurações do evento (Nome e Logo)
-app.post("/api/event-config", (req, res) => {
+app.post("/api/event-config", async (req, res) => {
   const { enterpriseName, logoUrl, logoType, logoIconName, eventDate } = req.body;
   if (enterpriseName) eventConfig.enterpriseName = enterpriseName;
   if (logoUrl !== undefined) eventConfig.logoUrl = logoUrl;
@@ -381,6 +593,7 @@ app.post("/api/event-config", (req, res) => {
   if (logoIconName) eventConfig.logoIconName = logoIconName;
   if (eventDate) eventConfig.eventDate = eventDate;
 
+  await saveEventConfig();
   logAction("Administrador", "ADMIN", "Configurações do Evento Atualizadas", `Empreendimento alterado para "${eventConfig.enterpriseName}"`);
   res.json({ success: true, eventConfig });
 });
@@ -391,7 +604,7 @@ app.get("/api/enterprises", (req, res) => {
 });
 
 // Cadastrar ou editar um empreendimento
-app.post("/api/enterprises", (req, res) => {
+app.post("/api/enterprises", async (req, res) => {
   try {
     const { id, name } = req.body;
     if (!name || !name.trim()) {
@@ -408,17 +621,20 @@ app.post("/api/enterprises", (req, res) => {
 
       const oldName = enterprise.name;
       enterprise.name = normalizedName;
+      await saveEnterprise(enterprise);
 
       // Renomear em cascata nos compradores ativos
-      clients.forEach(c => {
+      for (const c of clients) {
         if (c.empreendimento === oldName) {
           c.empreendimento = normalizedName;
+          await saveClient(c);
         }
-      });
+      }
 
       // Se é o atual ativo nas configurações de branding, atualiza também
       if (eventConfig.enterpriseName === oldName) {
         eventConfig.enterpriseName = normalizedName;
+        await saveEventConfig();
       }
 
       logAction("Administrador", "ADMIN", "Empreendimento editado", `Empreendimento alterado de "${oldName}" para "${normalizedName}"`);
@@ -434,6 +650,7 @@ app.post("/api/enterprises", (req, res) => {
         name: normalizedName
       };
       enterprises.push(newEnt);
+      await saveEnterprise(newEnt);
       logAction("Administrador", "ADMIN", "Empreendimento criado", `Novo empreendimento cadastrado: "${normalizedName}"`);
       res.json({ success: true, enterprises });
     }
@@ -444,7 +661,7 @@ app.post("/api/enterprises", (req, res) => {
 });
 
 // Excluir um empreendimento
-app.delete("/api/enterprises/:id", (req, res) => {
+app.delete("/api/enterprises/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const entIndex = enterprises.findIndex(e => e.id === id);
@@ -461,6 +678,7 @@ app.delete("/api/enterprises/:id", (req, res) => {
     }
 
     enterprises.splice(entIndex, 1);
+    await deleteEnterpriseDoc(id);
     logAction("Administrador", "ADMIN", "Empreendimento removido", `Empreendimento "${entName}" excluído.`);
     res.json({ success: true, enterprises });
   } catch (err: any) {
@@ -705,7 +923,7 @@ app.get("/api/users", (req, res) => {
 });
 
 // Cadastrar/Editar usuário
-app.post("/api/users", (req, res) => {
+app.post("/api/users", async (req, res) => {
   const { id, name, role, username, deskNumber, status } = req.body;
   
   if (!username) {
@@ -722,7 +940,14 @@ app.post("/api/users", (req, res) => {
 
   if (id) {
     // Editar
-    users = users.map(u => u.id === id ? { ...u, name, role, username: normalizedUsername, deskNumber, status: status || u.status } : u);
+    users = users.map(u => {
+      if (u.id === id) {
+        const updated = { ...u, name, role, username: normalizedUsername, deskNumber, status: status || u.status };
+        saveUser(updated);
+        return updated;
+      }
+      return u;
+    });
     logAction("Administrador", "ADMIN", "Usuário editado", `Usuário ${name} alterado com sucesso`);
   } else {
     // Criar
@@ -736,13 +961,14 @@ app.post("/api/users", (req, res) => {
       completedCount: 0
     };
     users.push(newUser);
+    await saveUser(newUser);
     logAction("Administrador", "ADMIN", "Usuário criado", `Novo usuário ${name} cadastrado como ${role}`);
   }
   res.json({ success: true, users });
 });
 
 // Excluir usuário do sistema
-app.delete("/api/users/:id", (req, res) => {
+app.delete("/api/users/:id", async (req, res) => {
   const { id } = req.params;
   const userExist = users.find(u => u.id === id);
   if (userExist) {
@@ -750,6 +976,7 @@ app.delete("/api/users/:id", (req, res) => {
       return res.status(400).json({ error: "ERRO: O sistema precisa de pelo menos 1 Administrador ativo." });
     }
     users = users.filter(u => u.id !== id);
+    await deleteUserDoc(id);
     logAction("Administrador", "ADMIN", "Usuário removido", `Usuário ${userExist.name} (${userExist.role}) foi excluído.`);
     res.json({ success: true, users });
   } else {
@@ -758,13 +985,14 @@ app.delete("/api/users/:id", (req, res) => {
 });
 
 // Atualizar status de usuário/operador
-app.post("/api/users/:id/status", (req, res) => {
+app.post("/api/users/:id/status", async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   
   const userObj = users.find(u => u.id === id);
   if (userObj) {
     userObj.status = status;
+    await saveUser(userObj);
     logAction(userObj.name, userObj.role, "Alterou Status", `Operador alterou sua disponibilidade para: ${status}`);
     res.json({ success: true, user: userObj });
   } else {
@@ -773,7 +1001,7 @@ app.post("/api/users/:id/status", (req, res) => {
 });
 
 // Importação JSON de clientes de planilha
-app.post("/api/clients/import", (req, res) => {
+app.post("/api/clients/import", async (req, res) => {
   try {
     const { fileData } = req.body; // Array de objetos importados
     if (!Array.isArray(fileData)) {
@@ -783,12 +1011,12 @@ app.post("/api/clients/import", (req, res) => {
     let importedCount = 0;
     let updatedCount = 0;
 
-    fileData.forEach((row: any) => {
-      if (!row || !row.nome || !row.cpf) return;
+    for (const row of fileData) {
+      if (!row || !row.nome || !row.cpf) continue;
       
       // Procura CPF existente de forma robusta
       const rawCpfClean = String(row.cpf).replace(/\D/g, '');
-      if (!rawCpfClean) return;
+      if (!rawCpfClean) continue;
 
       const clientExist = clients.find(c => {
         if (!c.cpf) return false;
@@ -805,6 +1033,7 @@ app.post("/api/clients/import", (req, res) => {
         clientExist.email = row.email || clientExist.email;
         clientExist.statusContratual = row.statusContratual || clientExist.statusContratual;
         if (row.observacoes) clientExist.observacoes = row.observacoes;
+        await saveClient(clientExist);
         updatedCount++;
       } else {
         // Criar novo registro
@@ -826,9 +1055,10 @@ app.post("/api/clients/import", (req, res) => {
           documentos: []
         };
         clients.push(newClient);
+        await saveClient(newClient);
         importedCount++;
       }
-    });
+    }
 
     logAction("Administrador", "ADMIN", "Importação Realizada", `Importados ${importedCount} novos registros, atualizados ${updatedCount} existentes`);
     res.json({ success: true, importedCount, updatedCount, clients });
@@ -839,7 +1069,7 @@ app.post("/api/clients/import", (req, res) => {
 });
 
 // Recepção: Marcar presença e inserir na fila de atendimento
-app.post("/api/clients/:id/check-in", (req, res) => {
+app.post("/api/clients/:id/check-in", async (req, res) => {
   const { id } = req.params;
   const { possuiProcurador, priority, observacoes } = req.body;
   const clientObj = clients.find(c => c.id === id);
@@ -860,6 +1090,7 @@ app.post("/api/clients/:id/check-in", (req, res) => {
     clientObj.observacoes = observacoes;
   }
 
+  await saveClient(clientObj);
   logAction("Recepção (Fernanda)", "RECEPCIONISTA", "Presença Confirmada", `${clientObj.nome} inserido na fila de Atendimento.`);
   res.json({ success: true, client: clientObj });
 });
@@ -1190,6 +1421,7 @@ app.get("/api/operational-alerts", (req, res) => {
 
 // Vite & Static file handler para Cloud Run
 async function startServer() {
+  await initFirebase();
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

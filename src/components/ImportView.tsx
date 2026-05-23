@@ -20,6 +20,23 @@ interface ColumnMapping {
   description: string;
 }
 
+function cleanQuotes(val: any): string {
+  if (val === undefined || val === null) return '';
+  let str = String(val).trim();
+  while (str.startsWith('"') && str.endsWith('"') && str.length > 1) {
+    str = str.substring(1, str.length - 1).trim();
+  }
+  return str;
+}
+
+function formatCPF(cpf: string): string {
+  const clean = cpf.replace(/\D/g, '');
+  if (clean.length === 11) {
+    return `${clean.substring(0, 3)}.${clean.substring(3, 6)}.${clean.substring(6, 9)}-${clean.substring(9)}`;
+  }
+  return cpf;
+}
+
 export default function ImportView({ clients, onImportData }: ImportViewProps) {
   // Estado de controle das Abas
   const [activeTab, setActiveTab] = useState<'FILE' | 'PASTE'>('FILE');
@@ -67,23 +84,25 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
         headers.forEach((header, index) => {
           // Normalizar cabeçalho para coincidir com as propriedades esperadas
           const normalizedHeader = header.toLowerCase().replace(/[^a-z0-9]/g, '');
-          rowObj[normalizedHeader] = values[index] || '';
+          rowObj[normalizedHeader] = cleanQuotes(values[index]);
         });
 
         // Mapeamento específico estrito para as chaves do sistema
+        const rawCpf = (rowObj.cpf || rowObj.documento || '').replace(/\D/g, '');
+        const formattedCpfValue = formatCPF(rawCpf);
+
         const canonicalRow: any = {
-          nome: rowObj.nome || rowObj.nomecompleto || rowObj.comprador || rowObj.cliente || '',
-          cpf: rowObj.cpf || rowObj.documento || '',
-          empreendimento: rowObj.empreendimento || rowObj.condominio || rowObj.obra || '',
-          bloco: rowObj.bloco || rowObj.torre || '',
-          unidade: rowObj.unidade || rowObj.apartamento || rowObj.apto || rowObj.ap || '',
-          telefone: rowObj.telefone || rowObj.tel || rowObj.celular || '',
-          email: rowObj.email || rowObj.correioeletronico || '',
-          statusContratual: rowObj.statuscontratual || rowObj.status || 'QUITADO'
+          nome: cleanQuotes(rowObj.nome || rowObj.nomecompleto || rowObj.comprador || rowObj.cliente || ''),
+          cpf: formattedCpfValue || cleanQuotes(rowObj.cpf || rowObj.documento || ''),
+          empreendimento: cleanQuotes(rowObj.empreendimento || rowObj.condominio || rowObj.obra || ''),
+          bloco: cleanQuotes(rowObj.bloco || rowObj.torre || ''),
+          unidade: cleanQuotes(rowObj.unidade || rowObj.apartamento || rowObj.apto || rowObj.ap || ''),
+          telefone: cleanQuotes(rowObj.telefone || rowObj.tel || rowObj.celular || ''),
+          email: cleanQuotes(rowObj.email || rowObj.correioeletronico || ''),
+          statusContratual: cleanQuotes(rowObj.statuscontratual || rowObj.status || 'QUITADO')
         };
 
         // Validação de CPF basica
-        const rawCpf = canonicalRow.cpf.replace(/\D/g, '');
         if (rawCpf.length !== 11) {
           localWarnings.push(`Linha ${i + 1} ("${canonicalRow.nome || 'Sem Nome'}"): CPF formato inválido, esperado 11 dígitos.`);
         }
@@ -93,7 +112,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
         canonicalRow.willUpdate = duplicatedInDatabase;
 
         // Verificação de Duplicidade no proprio arquivo colado
-        const duplicatedInFile = parsedRows.some(p => p.cpf.replace(/\D/g, '') === rawCpf);
+        const duplicatedInFile = parsedRows.some(p => p.cpf && String(p.cpf).replace(/\D/g, '') === rawCpf);
         if (duplicatedInFile) {
           localWarnings.push(`Linha ${i + 1}: CPF duplicado encontrado dentro do próprio texto.`);
         }
@@ -198,7 +217,20 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
         const worksheet = workbook.Sheets[firstSheetName];
         
         // Obter planilha como array de arrays para podermos analisar as linhas de forma precisa
-        const sheetRows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+        let sheetRows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+
+        // Se a planilha foi interpretada como apenas uma coluna cheia de ponto-e-vírgulas (ex: CSV brasileiro/europeu exportado pelo Excel)
+        const hasSingleColumnWithSemicolon = sheetRows.length > 0 && 
+          sheetRows.some(row => Array.isArray(row) && row.length === 1 && typeof row[0] === 'string' && row[0].includes(';'));
+
+        if (hasSingleColumnWithSemicolon) {
+          sheetRows = sheetRows.map(row => {
+            if (Array.isArray(row) && row.length === 1 && typeof row[0] === 'string') {
+              return row[0].split(';');
+            }
+            return row;
+          });
+        }
         
         if (sheetRows.length === 0) {
           alert("Nenhuma linha útil localizada na planilha selecionada.");
@@ -347,12 +379,15 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
         const colIdx = columnMapping[key];
         if (colIdx === undefined || colIdx === -1) return '';
         const value = row[colIdx];
-        return value !== undefined && value !== null ? String(value).trim() : '';
+        return cleanQuotes(value);
       };
+
+      const rawCpf = getMappedValue('cpf').replace(/\D/g, '');
+      const formattedCpfValue = formatCPF(rawCpf);
 
       const rowObj = {
         nome: getMappedValue('nome'),
-        cpf: getMappedValue('cpf'),
+        cpf: formattedCpfValue || getMappedValue('cpf'),
         empreendimento: getMappedValue('empreendimento'),
         bloco: getMappedValue('bloco'),
         unidade: getMappedValue('unidade'),
@@ -376,7 +411,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
       const isNew = !duplicatedInDatabase;
 
       // Checa duplicidade dentro da própria planilha sendo importada
-      const duplicatedInFile = parsedRows.some(p => p.cpf.replace(/\D/g, '') === cpfRaw);
+      const duplicatedInFile = parsedRows.some(p => p.cpf && String(p.cpf).replace(/\D/g, '') === cpfRaw);
       if (duplicatedInFile) {
         localWarnings.push(`Registro #${rowNum}: O CPF ${rowObj.cpf} está repetido dentro de outra linha deste mesmo arquivo.`);
       }

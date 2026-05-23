@@ -26,7 +26,7 @@ export default function RecepcaoView({ clients, onCheckIn }: RecepcaoViewProps) 
     const term = searchTerm.toLowerCase();
     return (
       (c.nome.toLowerCase().includes(term) ||
-      c.cpf.includes(term) ||
+      (c.cpf && c.cpf.includes(term)) ||
       c.unidade.toLowerCase().includes(term)) &&
       c.status === 'AGUARDANDO_RECEPCAO'
     );
