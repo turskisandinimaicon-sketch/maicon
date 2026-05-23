@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { Client, User, AuditLog, WhatsappMessage, CallLog, OperationalAlert, DocumentAttachment, EventConfig, Enterprise } from "./src/types";
 
 const app = express();
@@ -1192,6 +1191,7 @@ app.get("/api/operational-alerts", (req, res) => {
 // Vite & Static file handler para Cloud Run
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

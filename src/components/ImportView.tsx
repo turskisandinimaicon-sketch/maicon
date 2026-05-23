@@ -89,7 +89,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
         }
 
         // Verificação de Duplicidade com base de dados corrente do backend
-        const duplicatedInDatabase = clients.some(c => c.cpf.replace(/\D/g, '') === rawCpf);
+        const duplicatedInDatabase = clients.some(c => c.cpf && String(c.cpf).replace(/\D/g, '') === rawCpf);
         canonicalRow.willUpdate = duplicatedInDatabase;
 
         // Verificação de Duplicidade no proprio arquivo colado
@@ -372,7 +372,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
       }
 
       // Checa duplicidade de CPF na base atual do servidor
-      const duplicatedInDatabase = clients.some(c => c.cpf.replace(/\D/g, '') === cpfRaw);
+      const duplicatedInDatabase = clients.some(c => c.cpf && String(c.cpf).replace(/\D/g, '') === cpfRaw);
       const isNew = !duplicatedInDatabase;
 
       // Checa duplicidade dentro da própria planilha sendo importada
