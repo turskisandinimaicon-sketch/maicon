@@ -282,6 +282,22 @@ export default function App() {
     }
   };
 
+  const handleRemoveFromQueue = async (clientId: string) => {
+    try {
+      const response = await fetch(`/api/clients/${clientId}/remove-from-queue`, {
+        method: 'POST'
+      });
+      if (response.ok) {
+        await fetchAllData();
+      } else {
+        const data = await response.json();
+        alert(data.error || "Erro ao remover cliente da fila.");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Roleta: Chamar próximo da Fila
   const handleCallNext = async (operatorId: string, type: 'ATENDIMENTO' | 'VISTORIA') => {
     try {
@@ -472,96 +488,101 @@ export default function App() {
           />
         ) : currentUser.role === 'ADMIN' ? (
           /* COCKPIT DO ADMINISTRADOR */
-          <div className="bg-white border-b border-gray-150 sticky top-12 z-35 shadow-xxs">
-            <div className="max-w-7xl mx-auto px-4 flex items-center justify-between text-xs">
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setAdminTab('DASHBOARD')}
-                  className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    adminTab === 'DASHBOARD' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
-                  }`}
-                >
-                  <Shield className="w-3.5 h-3.5" />
-                  Painel de Monitoramento
-                </button>
-                <button
-                  onClick={() => setAdminTab('IMPORT')}
-                  className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    adminTab === 'IMPORT' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
-                  }`}
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  Importar Planilha XLSX
-                </button>
-                <button
-                  onClick={() => setAdminTab('AUDIT_LOGS')}
-                  className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    adminTab === 'AUDIT_LOGS' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  Auditoria de Ações
-                </button>
-                <button
-                  onClick={() => setAdminTab('USER_MANAGEMENT')}
-                  className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    adminTab === 'USER_MANAGEMENT' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  Gerenciar Usuários
-                </button>
-              </div>
+          <div className="flex-1 flex flex-col">
+            <div className="bg-white border-b border-gray-150 sticky top-12 z-35 shadow-xxs">
+              <div className="max-w-7xl mx-auto px-4 flex items-center justify-between text-xs">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setAdminTab('DASHBOARD')}
+                    className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      adminTab === 'DASHBOARD' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
+                    }`}
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    Painel de Monitoramento
+                  </button>
+                  <button
+                    onClick={() => setAdminTab('IMPORT')}
+                    className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      adminTab === 'IMPORT' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
+                    }`}
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    Importar Planilha XLSX
+                  </button>
+                  <button
+                    onClick={() => setAdminTab('AUDIT_LOGS')}
+                    className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      adminTab === 'AUDIT_LOGS' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    Auditoria de Ações
+                  </button>
+                  <button
+                    onClick={() => setAdminTab('USER_MANAGEMENT')}
+                    className={`py-3 px-2 font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      adminTab === 'USER_MANAGEMENT' ? 'border-b-2 border-indigo-650 text-indigo-700' : 'text-slate-500 hover:text-indigo-600'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    Gerenciar Usuários
+                  </button>
+                </div>
 
-              <div className="text-slate-400 font-medium text-xxs hidden sm:inline">
-                Logado como: <strong className="text-slate-700">{currentUser.name} (Administração Geral)</strong>
+                <div className="text-slate-400 font-medium text-xxs hidden sm:inline">
+                  Logado como: <strong className="text-slate-700">{currentUser.name} (Administração Geral)</strong>
+                </div>
               </div>
             </div>
             
-            {/* Render das abas Admin */}
-            {adminTab === 'DASHBOARD' && (
-              <DashboardView
-                clients={clients}
-                users={users}
-                logs={logs}
-                whatsappMessages={whatsappMessages}
-                alerts={alerts}
-                onUpdateUserStatus={handleUpdateOperatorAvailability}
-                onValidateLaudo={handleValidateLaudo}
-                onResetDemo={handleResetDatabase}
-                onImportData={handleImportData}
-                eventConfig={eventConfig}
-                onUpdateEventConfig={handleUpdateEventConfig}
-                enterprises={enterprises}
-                onSaveEnterprise={handleSaveEnterprise}
-                onDeleteEnterprise={handleDeleteEnterprise}
-              />
-            )}
-            {adminTab === 'IMPORT' && (
-              <ImportView
-                clients={clients}
-                onImportData={handleImportData}
-              />
-            )}
-            {adminTab === 'AUDIT_LOGS' && (
-              <LogsView
-                logs={logs}
-              />
-            )}
-            {adminTab === 'USER_MANAGEMENT' && (
-              <UserManagementView
-                users={users}
-                currentUser={currentUser}
-                onSaveUser={handleSaveUser}
-                onDeleteUser={handleDeleteUser}
-              />
-            )}
+            <div className="flex-1">
+              {/* Render das abas Admin */}
+              {adminTab === 'DASHBOARD' && (
+                <DashboardView
+                  clients={clients}
+                  users={users}
+                  logs={logs}
+                  whatsappMessages={whatsappMessages}
+                  alerts={alerts}
+                  onUpdateUserStatus={handleUpdateOperatorAvailability}
+                  onValidateLaudo={handleValidateLaudo}
+                  onResetDemo={handleResetDatabase}
+                  onImportData={handleImportData}
+                  eventConfig={eventConfig}
+                  onUpdateEventConfig={handleUpdateEventConfig}
+                  enterprises={enterprises}
+                  onSaveEnterprise={handleSaveEnterprise}
+                  onDeleteEnterprise={handleDeleteEnterprise}
+                />
+              )}
+              {adminTab === 'IMPORT' && (
+                <ImportView
+                  clients={clients}
+                  onImportData={handleImportData}
+                />
+              )}
+              {adminTab === 'AUDIT_LOGS' && (
+                <LogsView
+                  logs={logs}
+                />
+              )}
+              {adminTab === 'USER_MANAGEMENT' && (
+                <UserManagementView
+                  users={users}
+                  currentUser={currentUser}
+                  onSaveUser={handleSaveUser}
+                  onDeleteUser={handleDeleteUser}
+                />
+              )}
+            </div>
           </div>
         ) : currentUser.role === 'RECEPCIONISTA' ? (
           /* PAINEL DE RECEPCAO */
           <RecepcaoView
             clients={clients}
             onCheckIn={handleCheckIn}
+            onRemoveFromQueue={handleRemoveFromQueue}
           />
         ) : currentUser.role === 'ATENDENTE' ? (
           /* PAINEL DE ATENDENTE */

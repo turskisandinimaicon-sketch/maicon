@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Client, PriorityType } from '../types';
-import { Search, MapPin, User, CheckCircle2, UserCheck, Accessibility, Clock, AlertCircle } from 'lucide-react';
+import { Search, MapPin, User, CheckCircle2, UserCheck, Accessibility, Clock, AlertCircle, X } from 'lucide-react';
 
 interface RecepcaoViewProps {
   clients: Client[];
   onCheckIn: (clientId: string, possuiProcurador: boolean, priority: PriorityType, observacoes: string) => void;
+  onRemoveFromQueue?: (clientId: string) => void;
 }
 
-export default function RecepcaoView({ clients, onCheckIn }: RecepcaoViewProps) {
+export default function RecepcaoView({ clients, onCheckIn, onRemoveFromQueue }: RecepcaoViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [possuiProcurador, setPossuiProcurador] = useState(false);
   const [priority, setPriority] = useState<PriorityType>('NORMAL');
@@ -211,16 +212,44 @@ export default function RecepcaoView({ clients, onCheckIn }: RecepcaoViewProps) 
 
           {/* Histórico Recente de Presenças */}
           <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs mt-4">
-            <h4 className="text-xs font-bold text-slate-700 border-b border-gray-100 pb-2 mb-2">Compradores Já Processados</h4>
+            <h4 className="text-xs font-bold text-slate-700 border-b border-gray-150 pb-2 mb-2">Compradores Já Processados</h4>
             <div className="space-y-1">
               {clients.filter(c => c.status !== 'AGUARDANDO_RECEPCAO').slice(0, 3).map(clientItem => (
-                <div key={clientItem.id} className="flex justify-between items-center text-[10px] text-gray-500 py-1 bg-slate-50/50 px-2 rounded mt-1.5">
-                  <span className="font-bold text-slate-800">{clientItem.nome} ({clientItem.unidade})</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="bg-indigo-50 text-indigo-700 text-xxs font-semibold px-1 rounded">
-                      {clientItem.status === 'FILA_ATENDIMENTO' ? 'Fila Atendimento' : 'Adiantado'}
+                <div key={clientItem.id} className="flex justify-between items-center text-[10px] text-gray-500 py-1 bg-slate-50/55 px-2 rounded mt-1.5 gap-2">
+                  <div className="flex-1 truncate">
+                    <span className="font-bold text-slate-800 block truncate">{clientItem.nome} ({clientItem.unidade})</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="bg-indigo-50 text-indigo-700 text-xxs font-semibold px-1 rounded shrink-0">
+                      {clientItem.status === 'FILA_ATENDIMENTO' 
+                        ? 'Fila Atendimento' 
+                        : clientItem.status === 'EM_ATENDIMENTO' 
+                        ? 'Em Atendimento'
+                        : clientItem.status === 'FILA_VISTORIA'
+                        ? 'Fila Vistoria'
+                        : clientItem.status === 'EM_VISTORIA'
+                        ? 'Em Vistoria'
+                        : clientItem.status === 'PROCESSO_ENCERRADO'
+                        ? 'Concluído'
+                        : 'Processado'}
                     </span>
-                    <span className="font-mono text-gray-400">{clientItem.tempoChegadaRecepcao || '16:00'}</span>
+                    <span className="font-mono text-gray-400 shrink-0">{clientItem.tempoChegadaRecepcao || '16:00'}</span>
+                    
+                    {clientItem.status === 'FILA_ATENDIMENTO' && onRemoveFromQueue && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Deseja desfazer o check-in e remover ${clientItem.nome} da fila?`)) {
+                            onRemoveFromQueue(clientItem.id);
+                          }
+                        }}
+                        title="Desfazer Check-In"
+                        className="text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1 rounded transition-all cursor-pointer border border-transparent"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
