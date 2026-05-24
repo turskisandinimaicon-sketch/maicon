@@ -218,267 +218,8 @@ async function saveLog(log: AuditLog) {
   }
 }
 
-// --- BASE DE DADOS EM MEMÓRIA (PRÉ-POPULADA COM DADOS REALISTAS) ---
-let clients: Client[] = [
-  {
-    id: "c-1",
-    nome: "Jorge Silva dos Santos",
-    cpf: "123.456.789-01",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco A",
-    unidade: "Apto 203",
-    telefone: "(11) 98765-4321",
-    email: "jorge.silva@gmail.com",
-    statusContratual: "QUITADO",
-    status: "AGUARDANDO_RECEPCAO",
-    priority: "NORMAL",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: false,
-    liberadoParaVistoria: false,
-    documentos: [],
-  },
-  {
-    id: "c-2",
-    nome: "Mariana de Medeiros",
-    cpf: "234.567.890-12",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco B",
-    unidade: "Apto 101",
-    telefone: "(11) 97123-4567",
-    email: "mariana.medeiros@hotmail.com",
-    statusContratual: "QUITADO",
-    status: "AGUARDANDO_RECEPCAO",
-    priority: "GESTANTE",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: false,
-    liberadoParaVistoria: false,
-    documentos: [],
-  },
-  {
-    id: "c-3",
-    nome: "Carlos Alberto Costa",
-    cpf: "345.678.901-23",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco A",
-    unidade: "Apto 402",
-    telefone: "(21) 99345-6789",
-    email: "carlos.costa@yahoo.com.br",
-    statusContratual: "QUITADO",
-    status: "FILA_ATENDIMENTO",
-    priority: "IDOSO",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: false,
-    liberadoParaVistoria: false,
-    tempoChegadaRecepcao: "16:10",
-    tempoEntradaFilaAtendimento: "16:12",
-    documentos: [],
-  },
-  {
-    id: "c-4",
-    nome: "Amanda Rodrigues Lima",
-    cpf: "456.789.012-34",
-    empreendimento: "Vila Alpina Premium",
-    bloco: "Torre 1",
-    unidade: "Apto 1205",
-    telefone: "(11) 96543-2109",
-    email: "amanda.lima@outlook.com",
-    statusContratual: "EM_ANALISE",
-    status: "EM_ATENDIMENTO",
-    priority: "NORMAL",
-    possuiProcurador: true,
-    procuradorNome: "Renato Lima dos Santos",
-    procuradorCpf: "098.765.432-10",
-    possuiVistoriadorProprio: false,
-    liberadoParaVistoria: false,
-    atendenteId: "u-3",
-    atendenteNome: "Juliana Souza",
-    guicheChamada: "Guichê 02",
-    tempoChegadaRecepcao: "15:45",
-    tempoEntradaFilaAtendimento: "15:47",
-    tempoInicioAtendimento: "15:55",
-    documentos: [
-      {
-        id: "doc-1",
-        name: "procuracao_assinada.pdf",
-        type: "application/pdf",
-        size: "1.2 MB",
-        uploadedAt: "15:58",
-        category: "PROCURACAO",
-        url: "#"
-      }
-    ],
-  },
-  {
-    id: "c-5",
-    nome: "Roberto de Souza Neto",
-    cpf: "567.890.123-45",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco B",
-    unidade: "Apto 304",
-    telefone: "(11) 98877-6655",
-    email: "roberto.souza@gmail.com",
-    statusContratual: "QUITADO",
-    status: "AGUARDANDO_VISTORIADOR_PROPRIO",
-    priority: "NORMAL",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: true,
-    vistoriadorParticularNome: "Arq. Fabiano Toledo",
-    vistoriadorParticularCrea: "CREA SP 501239-A",
-    liberadoParaVistoria: false,
-    atendenteId: "u-2",
-    atendenteNome: "Renan Silva",
-    guicheChamada: "Guichê 01",
-    tempoChegadaRecepcao: "15:10",
-    tempoEntradaFilaAtendimento: "15:12",
-    tempoInicioAtendimento: "15:20",
-    tempoFimAtendimento: "15:35",
-    documentos: [],
-  },
-  {
-    id: "c-6",
-    nome: "Fernanda Alencar Santos",
-    cpf: "678.901.234-56",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco C",
-    unidade: "Apto 102",
-    telefone: "(11) 99112-2334",
-    email: "fernanda.alencar@gmail.com",
-    statusContratual: "PENDENTE_FINANCIAMENTO",
-    status: "FILA_VISTORIA",
-    priority: "NORMAL",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: false,
-    liberadoParaVistoria: true,
-    atendenteId: "u-4",
-    atendenteNome: "Marcos Castro",
-    guicheChamada: "Guichê 03",
-    tempoChegadaRecepcao: "15:00",
-    tempoEntradaFilaAtendimento: "15:02",
-    tempoInicioAtendimento: "15:08",
-    tempoFimAtendimento: "15:25",
-    tempoEntradaFilaVistoria: "15:25",
-    documentos: [],
-  },
-  {
-    id: "c-7",
-    nome: "Guilherme Santos Prado",
-    cpf: "789.012.345-67",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco A",
-    unidade: "Apto 501",
-    telefone: "(11) 98223-3445",
-    email: "guilherme.prado@live.com",
-    statusContratual: "QUITADO",
-    status: "EM_VISTORIA",
-    priority: "PCD",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: true,
-    vistoriadorParticularNome: "Eng. Cláudio Marins",
-    vistoriadorParticularCrea: "CREA SP 491321",
-    liberadoParaVistoria: true,
-    atendenteId: "u-2",
-    atendenteNome: "Renan Silva",
-    guicheChamada: "Guichê 01",
-    vistoriadorId: "u-6",
-    vistoriadorNome: "Tiago Mendes",
-    tempoChegadaRecepcao: "14:15",
-    tempoEntradaFilaAtendimento: "14:17",
-    tempoInicioAtendimento: "14:24",
-    tempoFimAtendimento: "14:40",
-    tempoEntradaFilaVistoria: "14:42",
-    tempoInicioVistoria: "14:50",
-    documentos: [],
-  },
-  {
-    id: "c-8",
-    nome: "Juliana Ferreira Dias",
-    cpf: "890.123.456-78",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco B",
-    unidade: "Apto 204",
-    telefone: "(11) 97445-5667",
-    email: "juliana.dias@gmail.com",
-    statusContratual: "QUITADO",
-    status: "PROCESSO_ENCERRADO",
-    priority: "NORMAL",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: false,
-    liberadoParaVistoria: true,
-    atendenteId: "u-3",
-    atendenteNome: "Juliana Souza",
-    guicheChamada: "Guichê 02",
-    vistoriadorId: "u-5",
-    vistoriadorNome: "Aline Pereira",
-    tempoChegadaRecepcao: "13:00",
-    tempoEntradaFilaAtendimento: "13:02",
-    tempoInicioAtendimento: "13:10",
-    tempoFimAtendimento: "13:28",
-    tempoEntradaFilaVistoria: "13:30",
-    tempoInicioVistoria: "13:40",
-    tempoFimVistoria: "14:25",
-    tempoProcessoEncerrado: "14:30",
-    documentos: [],
-  },
-  {
-    id: "c-9",
-    nome: "Lucas Mendes Correia",
-    cpf: "901.234.567-89",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco C",
-    unidade: "Apto 404",
-    telefone: "(11) 99887-1122",
-    email: "lucas.mendes@uol.com.br",
-    statusContratual: "QUITADO",
-    status: "PENDENTE", // Aguardando aprovação ou pendente geral
-    priority: "NORMAL",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: true,
-    vistoriadorParticularNome: "ProInspect Ltda",
-    liberadoParaVistoria: true,
-    atendenteId: "u-4",
-    atendenteNome: "Marcos Castro",
-    guicheChamada: "Guichê 03",
-    vistoriadorId: "u-7",
-    vistoriadorNome: "Patricia Vieira",
-    tempoChegadaRecepcao: "13:15",
-    tempoEntradaFilaAtendimento: "13:18",
-    tempoInicioAtendimento: "13:30",
-    tempoFimAtendimento: "13:50",
-    tempoEntradaFilaVistoria: "13:50",
-    tempoInicioVistoria: "14:00",
-    tempoFimVistoria: "14:48",
-    documentos: [
-      {
-        id: "doc-ext-laudo",
-        name: "laudo_engenharia_v1.pdf",
-        type: "application/pdf",
-        size: "4.8 MB",
-        uploadedAt: "15:02",
-        category: "LAUDO_PARTICULAR",
-        url: "#"
-      }
-    ],
-  },
-  {
-    id: "c-10",
-    nome: "Heitor Prado Gusmão",
-    cpf: "012.345.678-90",
-    empreendimento: "Residencial Canto das Flores",
-    bloco: "Bloco B",
-    unidade: "Apto 105",
-    telefone: "(11) 96123-8844",
-    email: "heitor.gusmao@gmail.com",
-    statusContratual: "QUITADO",
-    status: "FILA_ATENDIMENTO",
-    priority: "NORMAL",
-    possuiProcurador: false,
-    possuiVistoriadorProprio: false,
-    liberadoParaVistoria: false,
-    tempoChegadaRecepcao: "16:20",
-    tempoEntradaFilaAtendimento: "16:21",
-    documentos: [],
-  }
-];
+// --- BASE DE DADOS EM MEMÓRIA ---
+let clients: Client[] = [];
 
 let users: User[] = [
   { id: "u-1", name: "Bruno Reis", role: "ADMIN", username: "bruno.admin", status: "ONLINE", completedCount: 22 },
@@ -491,48 +232,21 @@ let users: User[] = [
   { id: "u-8", name: "Fernanda Lima", role: "RECEPCIONISTA", username: "fernanda.recep", status: "ONLINE", completedCount: 19 },
 ];
 
-let auditLogs: AuditLog[] = [
-  { id: "l-1", timestamp: "16:30:12", user: "Fernanda Lima", role: "RECEPCIONISTA", action: "Presença Confirmada", details: "Check-in do cliente Heitor Prado Gusmão finalizado com sucesso" },
-  { id: "l-2", timestamp: "16:21:05", user: "Fernanda Lima", role: "RECEPCIONISTA", action: "Fila Atendimento", details: "Heitor Prado Gusmão inserido na fila de Atendimento Geral" },
-  { id: "l-3", timestamp: "16:10:44", user: "Juliana Souza", role: "ATENDENTE", action: "Novo Atendimento", details: "Iniciou atendimento para Amanda Rodrigues Lima no Guichê 02" },
-  { id: "l-4", timestamp: "15:58:22", user: "Juliana Souza", role: "ATENDENTE", action: "Upload Documento", details: "Anexou procuracao_assinada.pdf para Amanda Rodrigues Lima" },
-  { id: "l-5", timestamp: "15:35:10", user: "Renan Silva", role: "ATENDENTE", action: "Aguardando Vistoriador", details: "Sinalizado que Roberto de Souza Neto possui vistoriador particular" },
-  { id: "l-6", timestamp: "15:25:00", user: "Marcos Castro", role: "ATENDENTE", action: "Liberação Vistoria", details: "Fernanda Alencar Santos liberada e encaminhada para fila de vistoria" },
-  { id: "l-7", timestamp: "14:50:18", user: "Tiago Mendes", role: "VISTORIADOR", action: "Início Vistoria", details: "Vistoria iniciada para Guilherme Santos Prado (unidade Apto 501)" },
-];
+let auditLogs: AuditLog[] = [];
 
-let whatsappMessages: WhatsappMessage[] = [
-  {
-    id: "w-1",
-    clienteId: "c-8",
-    clienteNome: "Juliana Ferreira Dias",
-    telefone: "(11) 97445-5667",
-    mensagem: "Olá, Juliana Ferreira Dias. Seu processo de entrega da unidade foi concluído com sucesso. Caso possua laudo de vistoria particular, utilize o link abaixo para anexar o documento em PDF: http://localhost:3000/public-portal?c=c-8",
-    statusEnvio: "ENTREGUE",
-    dataEnvio: "2026-05-22 14:30:00",
-    dataEntrega: "2026-05-22 14:31:05"
-  }
-];
+let whatsappMessages: WhatsappMessage[] = [];
 
-let activeCalls: CallLog[] = [
-  { id: "call-1", clienteNome: "Amanda Rodrigues Lima", unidade: "Apto 1205", localDestino: "Guichê 02", responsavelNome: "Juliana Souza", timestamp: "16:10", status: "ATENDIDO" },
-  { id: "call-2", clienteNome: "Guilherme Santos Prado", unidade: "Apto 501", localDestino: "Área B (Eng. Tiago)", responsavelNome: "Tiago Mendes", timestamp: "14:50", status: "ATENDIDO" }
-];
+let activeCalls: CallLog[] = [];
 
 let eventConfig: EventConfig = {
-  enterpriseName: "Residencial Canto das Flores",
+  enterpriseName: "",
   logoUrl: "",
   logoType: "ICON",
   logoIconName: "Building2",
-  eventDate: "23 de Maio de 2026"
+  eventDate: ""
 };
 
-let enterprises: Enterprise[] = [
-  { id: "ent-1", name: "Residencial Canto das Flores" },
-  { id: "ent-2", name: "Condomínio Belle Vue" },
-  { id: "ent-3", name: "Residencial Solar da Barra" },
-  { id: "ent-4", name: "Splendor Park Residence" }
-];
+let enterprises: Enterprise[] = [];
 
 // --- AUXILIARY FUNCTIONS ---
 function generateId() {
@@ -693,227 +407,78 @@ app.get("/api/clients", (req, res) => {
 });
 
 // Reset para fins de demonstração (Recarrega dados originais)
-app.post("/api/clients/reset", (req, res) => {
-  clients = [
-    {
-      id: "c-1",
-      nome: "Jorge Silva dos Santos",
-      cpf: "123.456.789-01",
-      empreendimento: "Residencial Canto das Flores",
-      bloco: "Bloco A",
-      unidade: "Apto 203",
-      telefone: "(11) 98765-4321",
-      email: "jorge.silva@gmail.com",
-      statusContratual: "QUITADO",
-      status: "AGUARDANDO_RECEPCAO",
-      priority: "NORMAL",
-      possuiProcurador: false,
-      possuiVistoriadorProprio: false,
-      liberadoParaVistoria: false,
-      documentos: [],
-    },
-    {
-      id: "c-2",
-      nome: "Mariana de Medeiros",
-      cpf: "234.567.890-12",
-      empreendimento: "Residencial Canto das Flores",
-      bloco: "Bloco B",
-      unidade: "Apto 101",
-      telefone: "(11) 97123-4567",
-      email: "mariana.medeiros@hotmail.com",
-      statusContratual: "QUITADO",
-      status: "AGUARDANDO_RECEPCAO",
-      priority: "GESTANTE",
-      possuiProcurador: false,
-      possuiVistoriadorProprio: false,
-      liberadoParaVistoria: false,
-      documentos: [],
-    },
-    {
-      id: "c-3",
-      nome: "Carlos Alberto Costa",
-      cpf: "345.678.901-23",
-      empreendimento: "Residencial Canto das Flores",
-      bloco: "Bloco A",
-      unidade: "Apto 402",
-      telefone: "(21) 99345-6789",
-      email: "carlos.costa@yahoo.com.br",
-      statusContratual: "QUITADO",
-      status: "FILA_ATENDIMENTO",
-      priority: "IDOSO",
-      possuiProcurador: false,
-      possuiVistoriadorProprio: false,
-      liberadoParaVistoria: false,
-      tempoChegadaRecepcao: "16:10",
-      tempoEntradaFilaAtendimento: "16:12",
-      documentos: [],
-    },
-    {
-      id: "c-4",
-      nome: "Amanda Rodrigues Lima",
-      cpf: "456.789.012-34",
-      empreendimento: "Vila Alpina Premium",
-      bloco: "Torre 1",
-      unidade: "Apto 1205",
-      telefone: "(11) 96543-2109",
-      email: "amanda.lima@outlook.com",
-      statusContratual: "EM_ANALISE",
-      status: "EM_ATENDIMENTO",
-      priority: "NORMAL",
-      possuiProcurador: true,
-      procuradorNome: "Renato Lima dos Santos",
-      procuradorCpf: "098.765.432-10",
-      possuiVistoriadorProprio: false,
-      liberadoParaVistoria: false,
-      atendenteId: "u-3",
-      atendenteNome: "Juliana Souza",
-      guicheChamada: "Guichê 02",
-      tempoChegadaRecepcao: "15:45",
-      tempoEntradaFilaAtendimento: "15:47",
-      tempoInicioAtendimento: "15:55",
-      documentos: [
-        {
-          id: "doc-1",
-          name: "procuracao_assinada.pdf",
-          type: "application/pdf",
-          size: "1.2 MB",
-          uploadedAt: "15:58",
-          category: "PROCURACAO",
-          url: "#"
-        }
-      ],
-    },
-    {
-      id: "c-5",
-      nome: "Roberto de Souza Neto",
-      cpf: "567.890.123-45",
-      empreendimento: "Residencial Canto das Flores",
-      bloco: "Bloco B",
-      unidade: "Apto 304",
-      telefone: "(11) 98877-6655",
-      email: "roberto.souza@gmail.com",
-      statusContratual: "QUITADO",
-      status: "AGUARDANDO_VISTORIADOR_PROPRIO",
-      priority: "NORMAL",
-      possuiProcurador: false,
-      possuiVistoriadorProprio: true,
-      vistoriadorParticularNome: "Arq. Fabiano Toledo",
-      vistoriadorParticularCrea: "CREA SP 501239-A",
-      liberadoParaVistoria: false,
-      atendenteId: "u-2",
-      atendenteNome: "Renan Silva",
-      guicheChamada: "Guichê 01",
-      tempoChegadaRecepcao: "15:10",
-      tempoEntradaFilaAtendimento: "15:12",
-      tempoInicioAtendimento: "15:20",
-      tempoFimAtendimento: "15:35",
-      documentos: [],
-    },
-    {
-      id: "c-6",
-      nome: "Fernanda Alencar Santos",
-      cpf: "678.901.234-56",
-      empreendimento: "Residencial Canto das Flores",
-      bloco: "Bloco C",
-      unidade: "Apto 102",
-      telefone: "(11) 99112-2334",
-      email: "fernanda.alencar@gmail.com",
-      statusContratual: "PENDENTE_FINANCIAMENTO",
-      status: "FILA_VISTORIA",
-      priority: "NORMAL",
-      possuiProcurador: false,
-      possuiVistoriadorProprio: false,
-      liberadoParaVistoria: true,
-      atendenteId: "u-4",
-      atendenteNome: "Marcos Castro",
-      guicheChamada: "Guichê 03",
-      tempoChegadaRecepcao: "15:00",
-      tempoEntradaFilaAtendimento: "15:02",
-      tempoInicioAtendimento: "15:08",
-      tempoFimAtendimento: "15:25",
-      tempoEntradaFilaVistoria: "15:25",
-      documentos: [],
-    },
-    {
-      id: "c-7",
-      nome: "Guilherme Santos Prado",
-      cpf: "789.012.345-67",
-      empreendimento: "Residencial Canto das Flores",
-      bloco: "Bloco A",
-      unidade: "Apto 501",
-      telefone: "(11) 98223-3445",
-      email: "guilherme.prado@live.com",
-      statusContratual: "QUITADO",
-      status: "EM_VISTORIA",
-      priority: "PCD",
-      possuiProcurador: false,
-      possuiVistoriadorProprio: true,
-      vistoriadorParticularNome: "Eng. Cláudio Marins",
-      vistoriadorParticularCrea: "CREA SP 491321",
-      liberadoParaVistoria: true,
-      atendenteId: "u-2",
-      atendenteNome: "Renan Silva",
-      guicheChamada: "Guichê 01",
-      vistoriadorId: "u-6",
-      vistoriadorNome: "Tiago Mendes",
-      tempoChegadaRecepcao: "14:15",
-      tempoEntradaFilaAtendimento: "14:17",
-      tempoInicioAtendimento: "14:24",
-      tempoFimAtendimento: "14:40",
-      tempoEntradaFilaVistoria: "14:42",
-      tempoInicioVistoria: "14:50",
-      documentos: [],
-    },
-    {
-      id: "c-8",
-      nome: "Juliana Ferreira Dias",
-      cpf: "890.123.456-78",
-      empreendimento: "Residencial Canto das Flores",
-      bloco: "Bloco B",
-      unidade: "Apto 204",
-      telefone: "(11) 97445-5667",
-      email: "juliana.dias@gmail.com",
-      statusContratual: "QUITADO",
-      status: "PROCESSO_ENCERRADO",
-      priority: "NORMAL",
-      possuiProcurador: false,
-      possuiVistoriadorProprio: false,
-      liberadoParaVistoria: true,
-      atendenteId: "u-3",
-      atendenteNome: "Juliana Souza",
-      guicheChamada: "Guichê 02",
-      vistoriadorId: "u-5",
-      vistoriadorNome: "Aline Pereira",
-      tempoChegadaRecepcao: "13:00",
-      tempoEntradaFilaAtendimento: "13:02",
-      tempoInicioAtendimento: "13:10",
-      tempoFimAtendimento: "13:28",
-      tempoEntradaFilaVistoria: "13:30",
-      tempoInicioVistoria: "13:40",
-      tempoFimVistoria: "14:25",
-      tempoProcessoEncerrado: "14:30",
-      documentos: [],
+app.post("/api/clients/reset", async (req, res) => {
+  try {
+    if (useFirebase && db) {
+      // 1. Delete all clients docs
+      const clientsColl = collection(db, "clients");
+      const clientsSnapshot = await getDocs(clientsColl);
+      for (const docSnap of clientsSnapshot.docs) {
+        await deleteDoc(doc(db, "clients", docSnap.id));
+      }
+
+      // 2. Delete all enterprises docs
+      const enterprisesColl = collection(db, "enterprises");
+      const enterprisesSnapshot = await getDocs(enterprisesColl);
+      for (const docSnap of enterprisesSnapshot.docs) {
+        await deleteDoc(doc(db, "enterprises", docSnap.id));
+      }
+
+      // 3. Delete all activeCalls docs
+      const callsColl = collection(db, "activeCalls");
+      const callsSnapshot = await getDocs(callsColl);
+      for (const docSnap of callsSnapshot.docs) {
+        await deleteDoc(doc(db, "activeCalls", docSnap.id));
+      }
+
+      // 4. Delete all whatsappMessages docs
+      const msgsColl = collection(db, "whatsappMessages");
+      const msgsSnapshot = await getDocs(msgsColl);
+      for (const docSnap of msgsSnapshot.docs) {
+        await deleteDoc(doc(db, "whatsappMessages", docSnap.id));
+      }
+
+      // 5. Delete all auditLogs docs
+      const auditColl = collection(db, "auditLogs");
+      const auditSnapshot = await getDocs(auditColl);
+      for (const docSnap of auditSnapshot.docs) {
+        await deleteDoc(doc(db, "auditLogs", docSnap.id));
+      }
+
+      // 6. Reset eventConfig
+      await setDoc(doc(db, "eventConfig", "config"), {
+        enterpriseName: "",
+        logoUrl: "",
+        logoType: "ICON",
+        logoIconName: "Building2",
+        eventDate: ""
+      });
     }
-  ];
+  } catch (err: any) {
+    console.error("Erro ao limpar dados no Firebase during reset: ", err);
+  }
+
+  // Clear in-memory state
+  clients = [];
+  activeCalls = [];
+  whatsappMessages = [];
+  auditLogs = [];
+  enterprises = [];
+  
+  eventConfig = {
+    enterpriseName: "",
+    logoUrl: "",
+    logoType: "ICON",
+    logoIconName: "Building2",
+    eventDate: ""
+  };
+
   users.forEach(u => {
     if (u.role === "ATENDENTE") u.status = "DISPONIVEL";
     if (u.role === "VISTORIADOR") u.status = "DISPONIVEL";
   });
-  activeCalls = [];
-  eventConfig = {
-    enterpriseName: "Residencial Canto das Flores",
-    logoUrl: "",
-    logoType: "ICON",
-    logoIconName: "Building2",
-    eventDate: "23 de Maio de 2026"
-  };
-  enterprises = [
-    { id: "ent-1", name: "Residencial Canto das Flores" },
-    { id: "ent-2", name: "Condomínio Belle Vue" },
-    { id: "ent-3", name: "Residencial Solar da Barra" },
-    { id: "ent-4", name: "Splendor Park Residence" }
-  ];
-  logAction("Administrador", "ADMIN", "Reset Geral", "Todos os dados foram redefinidos para os valores de fábrica");
+
+  logAction("Administrador", "ADMIN", "Reset Geral", "Todos os dados foram redefinidos para uma base limpa.");
   res.json({ message: "Reset completo realizado com sucesso", clients });
 });
 
@@ -1092,6 +657,53 @@ app.post("/api/clients/:id/check-in", async (req, res) => {
 
   await saveClient(clientObj);
   logAction("Recepção (Fernanda)", "RECEPCIONISTA", "Presença Confirmada", `${clientObj.nome} inserido na fila de Atendimento.`);
+  res.json({ success: true, client: clientObj });
+});
+
+// Recepção/Admin: Remover cliente da fila (colocado por engano)
+app.post("/api/clients/:id/remove-from-queue", async (req, res) => {
+  const { id } = req.params;
+  const clientObj = clients.find(c => c.id === id);
+
+  if (!clientObj) {
+    return res.status(404).json({ error: "Cliente não encontrado" });
+  }
+
+  // Guardar nome para remover de activeCalls e para os logs
+  const name = clientObj.nome;
+
+  // Resetar status e zerar tempos e operadores vinculados
+  clientObj.status = "AGUARDANDO_RECEPCAO";
+  delete clientObj.tempoChegadaRecepcao;
+  delete clientObj.tempoEntradaFilaAtendimento;
+  delete clientObj.tempoInicioAtendimento;
+  delete clientObj.tempoFimAtendimento;
+  delete clientObj.tempoEntradaFilaVistoria;
+  delete clientObj.tempoInicioVistoria;
+  delete clientObj.tempoFimVistoria;
+  delete clientObj.tempoProcessoEncerrado;
+  delete clientObj.atendenteId;
+  delete clientObj.atendenteNome;
+  delete clientObj.guicheChamada;
+  delete clientObj.vistoriadorId;
+  delete clientObj.vistoriadorNome;
+
+  // Remover de activeCalls em banco se houver
+  if (useFirebase && db) {
+    try {
+      const targetCalls = activeCalls.filter(call => call.clienteNome === name);
+      for (const call of targetCalls) {
+        await deleteDoc(doc(db, "activeCalls", call.id));
+      }
+    } catch (err) {
+      console.error("Erro deletando activeCalls no Firebase: ", err);
+    }
+  }
+  activeCalls = activeCalls.filter(call => call.clienteNome !== name);
+
+  await saveClient(clientObj);
+  logAction("Recepção (Fernanda)", "RECEPCIONISTA", "Removido da Fila", `${name} foi removido da fila de atendimento por ter sido adicionado por engano.`);
+  
   res.json({ success: true, client: clientObj });
 });
 
