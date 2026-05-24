@@ -136,6 +136,7 @@ async function saveEventConfig() {
       console.error("Erro saving eventConfig: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function saveEnterprise(ent: Enterprise) {
@@ -146,6 +147,7 @@ async function saveEnterprise(ent: Enterprise) {
       console.error("Erro saving enterprise: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function deleteEnterpriseDoc(id: string) {
@@ -156,6 +158,7 @@ async function deleteEnterpriseDoc(id: string) {
       console.error("Erro deleting enterprise: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function saveUser(usr: User) {
@@ -166,6 +169,7 @@ async function saveUser(usr: User) {
       console.error("Erro saving user: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function deleteUserDoc(id: string) {
@@ -176,6 +180,7 @@ async function deleteUserDoc(id: string) {
       console.error("Erro deleting user: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function saveClient(c: Client) {
@@ -186,6 +191,7 @@ async function saveClient(c: Client) {
       console.error("Erro saving client: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function saveCall(call: CallLog) {
@@ -196,6 +202,7 @@ async function saveCall(call: CallLog) {
       console.error("Erro saving call: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function saveMessage(msg: WhatsappMessage) {
@@ -206,6 +213,7 @@ async function saveMessage(msg: WhatsappMessage) {
       console.error("Erro saving message: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 async function saveLog(log: AuditLog) {
@@ -216,6 +224,7 @@ async function saveLog(log: AuditLog) {
       console.error("Erro saving log: ", err);
     }
   }
+  saveLocalBackup();
 }
 
 // --- BASE DE DADOS EM MEMÓRIA ---
@@ -247,6 +256,44 @@ let eventConfig: EventConfig = {
 };
 
 let enterprises: Enterprise[] = [];
+
+// --- LOCAL DATA PERSISTENCE BACKUP FALLBACK ---
+function saveLocalBackup() {
+  try {
+    const backupData = {
+      clients,
+      users,
+      auditLogs,
+      whatsappMessages,
+      activeCalls,
+      eventConfig,
+      enterprises
+    };
+    fs.writeFileSync(path.join(process.cwd(), "local-database.json"), JSON.stringify(backupData, null, 2), "utf8");
+  } catch (err) {
+    console.error("Erro ao salvar backup local:", err);
+  }
+}
+
+function loadLocalBackup() {
+  try {
+    const backupPath = path.join(process.cwd(), "local-database.json");
+    if (fs.existsSync(backupPath)) {
+      const rawData = fs.readFileSync(backupPath, "utf8");
+      const backupData = JSON.parse(rawData);
+      if (backupData.clients) clients = backupData.clients;
+      if (backupData.users) users = backupData.users;
+      if (backupData.auditLogs) auditLogs = backupData.auditLogs;
+      if (backupData.whatsappMessages) whatsappMessages = backupData.whatsappMessages;
+      if (backupData.activeCalls) activeCalls = backupData.activeCalls;
+      if (backupData.eventConfig) eventConfig = backupData.eventConfig;
+      if (backupData.enterprises) enterprises = backupData.enterprises;
+      console.log("[LOCAL BACKUP] Dados restaurados com sucesso de local-database.json");
+    }
+  } catch (err) {
+    console.error("Erro ao carregar backup local:", err);
+  }
+}
 
 // --- AUXILIARY FUNCTIONS ---
 function generateId() {
@@ -320,7 +367,7 @@ app.get("/api/enterprises", (req, res) => {
 // Cadastrar ou editar um empreendimento
 app.post("/api/enterprises", async (req, res) => {
   try {
-    const { id, name } = req.body;
+    const { id, name, logoType, logoUrl, logoIconName } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Nome do empreendimento é obrigatório." });
     }
@@ -335,6 +382,9 @@ app.post("/api/enterprises", async (req, res) => {
 
       const oldName = enterprise.name;
       enterprise.name = normalizedName;
+      enterprise.logoType = logoType || enterprise.logoType || 'ICON';
+      enterprise.logoUrl = logoUrl !== undefined ? logoUrl : enterprise.logoUrl;
+      enterprise.logoIconName = logoIconName || enterprise.logoIconName || 'Building2';
       await saveEnterprise(enterprise);
 
       // Renomear em cascata nos compradores ativos
@@ -348,6 +398,9 @@ app.post("/api/enterprises", async (req, res) => {
       // Se é o atual ativo nas configurações de branding, atualiza também
       if (eventConfig.enterpriseName === oldName) {
         eventConfig.enterpriseName = normalizedName;
+        eventConfig.logoType = enterprise.logoType;
+        eventConfig.logoUrl = enterprise.logoUrl || "";
+        eventConfig.logoIconName = enterprise.logoIconName;
         await saveEventConfig();
       }
 
@@ -361,7 +414,10 @@ app.post("/api/enterprises", async (req, res) => {
 
       const newEnt: Enterprise = {
         id: "ent-" + generateId(),
-        name: normalizedName
+        name: normalizedName,
+        logoType: logoType || 'ICON',
+        logoUrl: logoUrl || '',
+        logoIconName: logoIconName || 'Building2'
       };
       enterprises.push(newEnt);
       await saveEnterprise(newEnt);
@@ -552,13 +608,14 @@ app.delete("/api/users/:id", async (req, res) => {
 // Atualizar status de usuário/operador
 app.post("/api/users/:id/status", async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, deskNumber } = req.body;
   
   const userObj = users.find(u => u.id === id);
   if (userObj) {
-    userObj.status = status;
+    if (status) userObj.status = status;
+    if (deskNumber !== undefined) userObj.deskNumber = deskNumber;
     await saveUser(userObj);
-    logAction(userObj.name, userObj.role, "Alterou Status", `Operador alterou sua disponibilidade para: ${status}`);
+    logAction(userObj.name, userObj.role, "Alterou Status/Recurso", `Operador atualizou: status=${status || userObj.status}, guichê=${deskNumber || userObj.deskNumber}`);
     res.json({ success: true, user: userObj });
   } else {
     res.status(404).json({ error: "Usuário não encontrado" });
@@ -572,6 +629,20 @@ app.post("/api/clients/import", async (req, res) => {
     if (!Array.isArray(fileData)) {
       return res.status(400).json({ error: "Dados inválidos para importação." });
     }
+
+    // BASE ZERADA ANTES DA IMPORTACAO
+    if (useFirebase && db) {
+      try {
+        const clientsColl = collection(db, "clients");
+        const clientsSnapshot = await getDocs(clientsColl);
+        for (const docSnap of clientsSnapshot.docs) {
+          await deleteDoc(doc(db, "clients", docSnap.id));
+        }
+      } catch (fErr) {
+        console.warn("Erro ao limpar Firebase antes de importar:", fErr);
+      }
+    }
+    clients = []; // Limpa cache em memória também
 
     let importedCount = 0;
     let updatedCount = 0;
@@ -1033,6 +1104,7 @@ app.get("/api/operational-alerts", (req, res) => {
 
 // Vite & Static file handler para Cloud Run
 async function startServer() {
+  loadLocalBackup();
   await initFirebase();
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

@@ -144,5 +144,8 @@ export interface EventConfig {
 export interface Enterprise {
   id: string;
   name: string;
+  logoType?: 'ICON' | 'URL';
+  logoUrl?: string;
+  logoIconName?: string;
 }
 

@@ -212,9 +212,9 @@ export default function RecepcaoView({ clients, onCheckIn, onRemoveFromQueue }: 
 
           {/* Histórico Recente de Presenças */}
           <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs mt-4">
-            <h4 className="text-xs font-bold text-slate-700 border-b border-gray-150 pb-2 mb-2">Compradores Já Processados</h4>
-            <div className="space-y-1">
-              {clients.filter(c => c.status !== 'AGUARDANDO_RECEPCAO').slice(0, 3).map(clientItem => (
+            <h4 className="text-xs font-bold text-slate-700 border-b border-gray-150 pb-2 mb-2">Compradores Ativos nas Filas / Fluxo</h4>
+            <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1">
+              {clients.filter(c => c.status !== 'AGUARDANDO_RECEPCAO').map(clientItem => (
                 <div key={clientItem.id} className="flex justify-between items-center text-[10px] text-gray-500 py-1 bg-slate-50/55 px-2 rounded mt-1.5 gap-2">
                   <div className="flex-1 truncate">
                     <span className="font-bold text-slate-800 block truncate">{clientItem.nome} ({clientItem.unidade})</span>
@@ -235,17 +235,17 @@ export default function RecepcaoView({ clients, onCheckIn, onRemoveFromQueue }: 
                     </span>
                     <span className="font-mono text-gray-400 shrink-0">{clientItem.tempoChegadaRecepcao || '16:00'}</span>
                     
-                    {clientItem.status === 'FILA_ATENDIMENTO' && onRemoveFromQueue && (
+                    {onRemoveFromQueue && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`Deseja desfazer o check-in e remover ${clientItem.nome} da fila?`)) {
+                          if (confirm(`Deseja desfazer o check-in e remover ${clientItem.nome} de todas as filas? (Voltará para aguardando recepção)`)) {
                             onRemoveFromQueue(clientItem.id);
                           }
                         }}
-                        title="Desfazer Check-In"
-                        className="text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1 rounded transition-all cursor-pointer border border-transparent"
+                        title="Remover Comprador da Fila"
+                        className="text-red-605 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1 rounded transition-all cursor-pointer border border-transparent"
                       >
                         <X className="w-3 h-3" />
                       </button>

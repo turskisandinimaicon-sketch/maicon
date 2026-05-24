@@ -20,7 +20,13 @@ interface DashboardViewProps {
   eventConfig?: EventConfig;
   onUpdateEventConfig?: (config: Partial<EventConfig>) => Promise<boolean>;
   enterprises?: Enterprise[];
-  onSaveEnterprise?: (id: string | null, name: string) => Promise<{ success: boolean; error?: string }>;
+  onSaveEnterprise?: (
+    id: string | null, 
+    name: string,
+    logoType?: 'ICON' | 'URL',
+    logoUrl?: string,
+    logoIconName?: string
+  ) => Promise<{ success: boolean; error?: string }>;
   onDeleteEnterprise?: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -43,6 +49,56 @@ export default function DashboardView({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
+  // CALCULO DINAMICO DAS METRICAS DA FILA REAL-TIME
+  const parseTimeToMinutesLocal = (timeStr?: string): number | null => {
+    if (!timeStr) return null;
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return null;
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  };
+
+  // 1. Duração média de espera no atendimento
+  let totalAtendWait = 0;
+  let countAtendWait = 0;
+  clients.forEach(c => {
+    const start = parseTimeToMinutesLocal(c.tempoChegadaRecepcao);
+    const end = parseTimeToMinutesLocal(c.tempoInicioAtendimento);
+    if (start !== null && end !== null && end >= start) {
+      totalAtendWait += (end - start);
+      countAtendWait++;
+    }
+  });
+  const avgAtendWaitStr = countAtendWait > 0 ? `${Math.round(totalAtendWait / countAtendWait)} min` : "0 min";
+
+  // 2. Tempo de atendimento médio
+  let totalAtendDur = 0;
+  let countAtendDur = 0;
+  clients.forEach(c => {
+    const start = parseTimeToMinutesLocal(c.tempoInicioAtendimento);
+    const end = parseTimeToMinutesLocal(c.tempoFimAtendimento);
+    if (start !== null && end !== null && end >= start) {
+      totalAtendDur += (end - start);
+      countAtendDur++;
+    }
+  });
+  const avgAtendDurStr = countAtendDur > 0 ? `${Math.round(totalAtendDur / countAtendDur)} min` : "0 min";
+
+  // 3. Tempo de vistoria médio
+  let totalVistDur = 0;
+  let countVistDur = 0;
+  clients.forEach(c => {
+    const start = parseTimeToMinutesLocal(c.tempoInicioVistoria);
+    const end = parseTimeToMinutesLocal(c.tempoFimVistoria);
+    if (start !== null && end !== null && end >= start) {
+      totalVistDur += (end - start);
+      countVistDur++;
+    }
+  });
+  const avgVistDurStr = countVistDur > 0 ? `${Math.round(totalVistDur / countVistDur)} min` : "0 min";
+
   // Estados locais para edição das configurações de Branding do Evento
   const [isConfiguringEvent, setIsConfiguringEvent] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState<'BRANDING' | 'CATALOG'>('BRANDING');
@@ -53,11 +109,35 @@ export default function DashboardView({
   const [tempEventDate, setTempEventDate] = useState(eventConfig?.eventDate || '23 de Maio de 2026');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
-  // Estados locais para edição do catálogo de empreendimentos
   const [editingEnterpriseId, setEditingEnterpriseId] = useState<string | null>(null);
   const [editingEnterpriseName, setEditingEnterpriseName] = useState('');
   const [newEnterpriseName, setNewEnterpriseName] = useState('');
   const [isSavingEnterprise, setIsSavingEnterprise] = useState(false);
+
+  // NOVOS ESTADOS PARA BRANDING DOS EMPREENDIMENTOS NO CATÁLOGO
+  const [newEntLogoType, setNewEntLogoType] = useState<'ICON' | 'URL'>('ICON');
+  const [newEntLogoUrl, setNewEntLogoUrl] = useState('');
+  const [newEntLogoIcon, setNewEntLogoIcon] = useState('Building2');
+
+  const [editingEntLogoType, setEditingEntLogoType] = useState<'ICON' | 'URL'>('ICON');
+  const [editingEntLogoUrl, setEditingEntLogoUrl] = useState('');
+  const [editingEntLogoIcon, setEditingEntLogoIcon] = useState('Building2');
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEditing: boolean) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        if (isEditing) {
+          setEditingEntLogoUrl(base64String);
+        } else {
+          setNewEntLogoUrl(base64String);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   React.useEffect(() => {
     if (eventConfig) {
@@ -72,10 +152,19 @@ export default function DashboardView({
   const handleAddEnterprise = async () => {
     if (!newEnterpriseName.trim() || !onSaveEnterprise) return;
     setIsSavingEnterprise(true);
-    const result = await onSaveEnterprise(null, newEnterpriseName.trim());
+    const result = await onSaveEnterprise(
+      null, 
+      newEnterpriseName.trim(), 
+      newEntLogoType, 
+      newEntLogoUrl, 
+      newEntLogoIcon
+    );
     setIsSavingEnterprise(false);
     if (result.success) {
       setNewEnterpriseName('');
+      setNewEntLogoType('ICON');
+      setNewEntLogoUrl('');
+      setNewEntLogoIcon('Building2');
     } else {
       alert(result.error || "Erro ao cadastrar empreendimento.");
     }
@@ -84,11 +173,20 @@ export default function DashboardView({
   const handleUpdateEnterpriseLocal = async (id: string) => {
     if (!editingEnterpriseName.trim() || !onSaveEnterprise) return;
     setIsSavingEnterprise(true);
-    const result = await onSaveEnterprise(id, editingEnterpriseName.trim());
+    const result = await onSaveEnterprise(
+      id, 
+      editingEnterpriseName.trim(), 
+      editingEntLogoType, 
+      editingEntLogoUrl, 
+      editingEntLogoIcon
+    );
     setIsSavingEnterprise(false);
     if (result.success) {
       setEditingEnterpriseId(null);
       setEditingEnterpriseName('');
+      setEditingEntLogoType('ICON');
+      setEditingEntLogoUrl('');
+      setEditingEntLogoIcon('Building2');
     } else {
       alert(result.error || "Erro ao editar empreendimento.");
     }
@@ -442,32 +540,103 @@ export default function DashboardView({
             ) : (
               /* TAB 2: GERENCIAMENTO DE CATÁLOGO */
               <div className="space-y-4">
-                <div className="bg-white border border-slate-200 rounded-xl p-4">
-                  <h4 className="text-xxs font-bold text-slate-500 uppercase tracking-wider block pb-2">Cadastrar Novo Empreendimento no Catálogo</h4>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Ex: Splendor Park Residence II"
-                      value={newEnterpriseName}
-                      onChange={(e) => setNewEnterpriseName(e.target.value)}
-                      disabled={isSavingEnterprise}
-                      className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
-                    />
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <h4 className="text-xxs font-bold text-slate-500 uppercase tracking-wider block">Cadastrar Novo Empreendimento com Identidade Visual</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 block">Nome do Empreendimento</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Splendor Park Residence II"
+                        value={newEnterpriseName}
+                        onChange={(e) => setNewEnterpriseName(e.target.value)}
+                        disabled={isSavingEnterprise}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 font-medium"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 block">Identidade Visual (Logo / Brasão)</label>
+                      <select
+                        value={newEntLogoType}
+                        onChange={(e: any) => setNewEntLogoType(e.target.value)}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-slate-400"
+                      >
+                        <option value="ICON">Usar Ícone Residencial Padrão</option>
+                        <option value="URL">Anexar/Carregar Foto Logomarca</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {newEntLogoType === 'ICON' ? (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 block">Selecione o Símbolo que Representa o Prédio</label>
+                      <select
+                        value={newEntLogoIcon}
+                        onChange={(e) => setNewEntLogoIcon(e.target.value)}
+                        className="w-full max-w-sm bg-white border border-gray-300 rounded-lg px-2.5 py-1 text-xs outline-none"
+                      >
+                        <option value="Building2">🏢 Prédio Residencial Class (Building2)</option>
+                        <option value="Building">🏢 Prédio Comercial (Building)</option>
+                        <option value="Home">🏠 Mansão / Casa Club (Home)</option>
+                        <option value="Sparkles">✨ Alto Padrão Premium (Sparkles)</option>
+                        <option value="Award">🏆 Elegance / Awards (Award)</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="bg-white p-3 border border-dashed border-gray-300 rounded-lg space-y-2">
+                      <span className="text-[10px] font-bold text-indigo-700 block">Upload de Logotipo para TV (Foto PNG, JPG ou SVG)</span>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3 items-center">
+                        <label className="cursor-pointer shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xxs px-4 py-2 rounded-lg border border-indigo-200 transition-colors inline-flex items-center gap-1">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Selecionar do Computador</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => handleLogoUpload(e, false)} 
+                          />
+                        </label>
+                        
+                        <span className="text-[10px] text-gray-400">ou insira link externo:</span>
+                        
+                        <input
+                          type="text"
+                          placeholder="https://exemplo.com/logo.png"
+                          value={newEntLogoUrl}
+                          onChange={(e) => setNewEntLogoUrl(e.target.value)}
+                          className="flex-1 bg-slate-50 border border-gray-200 rounded-lg px-2 py-1 text-[11px] outline-none"
+                        />
+                      </div>
+
+                      {newEntLogoUrl && (
+                        <div className="flex items-center gap-3 bg-indigo-50/50 p-2 border border-indigo-100 rounded-lg">
+                          <img src={newEntLogoUrl} className="h-8 max-w-[120px] object-contain shrink-0" alt="Preview Logo" />
+                          <span className="text-xxs text-slate-600 truncate flex-1">Imagem anexada com sucesso!</span>
+                          <button type="button" onClick={() => setNewEntLogoUrl('')} className="text-xxs font-bold text-rose-600">remover</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-1">
                     <button
                       type="button"
                       onClick={handleAddEnterprise}
                       disabled={isSavingEnterprise || !newEnterpriseName.trim()}
-                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white text-xxs font-bold rounded-lg transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white text-xxs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Cadastrar
+                      Cadastrar Empreendimento
                     </button>
                   </div>
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                   <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center text-xxs font-bold text-slate-505 uppercase tracking-wider font-mono">
-                    <span>Nome Cadastrado</span>
+                    <span>Nome Cadastrado & Logo</span>
                     <span>Ações</span>
                   </div>
 
@@ -478,40 +647,115 @@ export default function DashboardView({
                   ) : (
                     <div className="divide-y divide-slate-100 max-h-[220px] overflow-y-auto">
                       {enterprises.map((e) => (
-                        <div key={e.id} className="px-4 py-2.5 flex items-center justify-between text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors">
+                        <div key={e.id} className="px-4 py-2.5 flex flex-col gap-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors">
                           {editingEnterpriseId === e.id ? (
-                            <div className="flex items-center gap-2 flex-1 mr-4">
-                              <input
-                                type="text"
-                                value={editingEnterpriseName}
-                                onChange={(e) => setEditingEnterpriseName(e.target.value)}
-                                className="flex-1 bg-white border border-indigo-400 rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-indigo-300 outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateEnterpriseLocal(e.id)}
-                                disabled={isSavingEnterprise || !editingEnterpriseName.trim()}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
-                              >
-                                Gravar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingEnterpriseId(null)}
-                                className="bg-slate-100 hover:bg-slate-250 text-slate-650 rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
-                              >
-                                Cancelar
-                              </button>
+                            <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-indigo-200">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 block">Editar Nome</label>
+                                  <input
+                                    type="text"
+                                    value={editingEnterpriseName}
+                                    onChange={(e) => setEditingEnterpriseName(e.target.value)}
+                                    className="w-full bg-white border border-indigo-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-300 outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 block">Editar Logo Tipo</label>
+                                  <select
+                                    value={editingEntLogoType}
+                                    onChange={(e: any) => setEditingEntLogoType(e.target.value)}
+                                    className="w-full bg-white border border-indigo-300 rounded px-2.5 py-1 text-xs outline-none"
+                                  >
+                                    <option value="ICON">Usar Ícone Residencial Padrão</option>
+                                    <option value="URL">Anexar/Carregar Foto Logomarca</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {editingEntLogoType === 'ICON' ? (
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 block">Escolher Ícone de Imóvel</label>
+                                  <select
+                                    value={editingEntLogoIcon}
+                                    onChange={(e) => setEditingEntLogoIcon(e.target.value)}
+                                    className="bg-white border border-indigo-300 rounded px-2 py-1 text-xs outline-none"
+                                  >
+                                    <option value="Building2">🏢 Prédio Residencial Class (Building2)</option>
+                                    <option value="Building">🏢 Prédio Comercial (Building)</option>
+                                    <option value="Home">🏠 Mansão / Casa Club (Home)</option>
+                                    <option value="Sparkles">✨ Alto Padrão Premium (Sparkles)</option>
+                                    <option value="Award">🏆 Elegance / Awards (Award)</option>
+                                  </select>
+                                </div>
+                              ) : (
+                                <div className="bg-white p-2 border border-dashed border-indigo-150 rounded space-y-2">
+                                  <div className="flex gap-2 items-center">
+                                    <label className="cursor-pointer shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] px-3 py-1.5 rounded border border-indigo-200 transition-colors">
+                                      Carregar Foto de Logo
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                        onChange={(e) => handleLogoUpload(e, true)} 
+                                      />
+                                    </label>
+                                    <input
+                                      type="text"
+                                      placeholder="https://exemplo.com/logo.png"
+                                      value={editingEntLogoUrl}
+                                      onChange={(e) => setEditingEntLogoUrl(e.target.value)}
+                                      className="flex-1 bg-slate-50 border border-gray-200 rounded px-2 py-0.5 text-xs outline-none"
+                                    />
+                                  </div>
+                                  {editingEntLogoUrl && (
+                                    <div className="flex items-center gap-2">
+                                      <img src={editingEntLogoUrl} className="h-6 max-w-[80px] object-contain" alt="Preview" />
+                                      <button type="button" onClick={() => setEditingEntLogoUrl('')} className="text-[10px] text-rose-500 font-bold">remover</button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="flex justify-end gap-1.5 pt-1 font-semibold">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateEnterpriseLocal(e.id)}
+                                  disabled={isSavingEnterprise || !editingEnterpriseName.trim()}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-3 py-1.5 text-[10px] font-bold cursor-pointer font-sans"
+                                >
+                                  Gravar Identidade
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingEnterpriseId(null)}
+                                  className="bg-slate-200 hover:bg-slate-300 text-slate-800 rounded px-3 py-1.5 text-[10px] font-bold cursor-pointer font-sans"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
                             </div>
                           ) : (
-                            <>
-                              <span className="truncate pr-4 font-semibold text-slate-700">{e.name}</span>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <div className="h-7 w-7 rounded bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                                  {e.logoType === 'URL' && e.logoUrl ? (
+                                    <img src={e.logoUrl} className="h-full w-full object-contain" alt="Logo" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <Building2 className="w-4 h-4 text-indigo-500" />
+                                  )}
+                                </div>
+                                <span className="truncate pr-4 font-semibold text-slate-705 text-slate-700">{e.name}</span>
+                              </div>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setEditingEnterpriseId(e.id);
                                     setEditingEnterpriseName(e.name);
+                                    setEditingEntLogoType(e.logoType || 'ICON');
+                                    setEditingEntLogoUrl(e.logoUrl || '');
+                                    setEditingEntLogoIcon(e.logoIconName || 'Building2');
                                   }}
                                   className="p-1 hover:bg-slate-100/80 rounded text-slate-600 hover:text-indigo-600 cursor-pointer"
                                   title="Editar Nome do Empreendimento"
@@ -527,7 +771,7 @@ export default function DashboardView({
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
-                            </>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -644,15 +888,15 @@ export default function DashboardView({
           
           <div className="mt-4 pt-4 border-t border-slate-800 text-xxs text-slate-400 grid grid-cols-3 gap-2 text-center">
             <div className="bg-slate-800 p-2 rounded">
-              <span className="block font-bold text-lg text-slate-200">12 min</span>
+              <span className="block font-bold text-lg text-slate-200">{avgAtendWaitStr}</span>
               Espera Média
             </div>
             <div className="bg-slate-800 p-2 rounded">
-              <span className="block font-bold text-lg text-slate-200">18 min</span>
-              Atendimento %
+              <span className="block font-bold text-lg text-slate-200">{avgAtendDurStr}</span>
+              Atendimento Ø
             </div>
             <div className="bg-slate-800 p-2 rounded">
-              <span className="block font-bold text-lg text-slate-200">35 min</span>
+              <span className="block font-bold text-lg text-slate-200">{avgVistDurStr}</span>
               Vistoria Ø
             </div>
           </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CallLog, Client, EventConfig } from '../types';
 import { 
-  Tv, Volume2, Users, ArrowBigRightDash, 
+  Tv, Volume2, VolumeX, Users, ArrowBigRightDash, 
   DoorClosed, Clock, Sparkles, AlertCircle, Building2,
   Home, Key, Building, Award, ShieldCheck
 } from 'lucide-react';
@@ -32,14 +32,42 @@ export default function TvPanelView({ activeCalls, clients, eventConfig }: TvPan
   const waitingVistCount = clients.filter(c => c.status === 'FILA_VISTORIA').length;
 
   const [blink, setBlink] = useState(false);
-  const [audioPlayed, setAudioPlayed] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+
+  // Função para tocar som de teste e iniciar AudioContext (vencer bloqueio do browser)
+  const enableAudioAndTriggerTest = () => {
+    setAudioEnabled(true);
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, audioCtx.currentTime); // A4
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const testMsg = new SpeechSynthesisUtterance("Áudio do painel ativado com sucesso!");
+        testMsg.lang = 'pt-BR';
+        testMsg.rate = 1.1;
+        window.speechSynthesis.speak(testMsg);
+      }
+    } catch (e) {
+      console.warn("Falha de teste de áudio:", e);
+    }
+  };
 
   // Efeito sonoro fake / piscar quando muda a chamada
   useEffect(() => {
     if (currentCall) {
       setBlink(true);
       
-      // Simulação auditiva usando o oscilador do navegador para som de chamada hospitalar "ding-dong" de fato!
+      // Som Chime "Ding-Dong" Hospitalar
       try {
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
         
@@ -50,7 +78,7 @@ export default function TvPanelView({ activeCalls, clients, eventConfig }: TvPan
         gain1.connect(audioCtx.destination);
         osc1.type = 'sine';
         osc1.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
-        gain1.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain1.gain.setValueAtTime(0.12, audioCtx.currentTime);
         gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
         osc1.start();
         osc1.stop(audioCtx.currentTime + 0.4);
@@ -63,11 +91,27 @@ export default function TvPanelView({ activeCalls, clients, eventConfig }: TvPan
           gain2.connect(audioCtx.destination);
           osc2.type = 'sine';
           osc2.frequency.setValueAtTime(392.00, audioCtx.currentTime); // G4
-          gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
+          gain2.gain.setValueAtTime(0.12, audioCtx.currentTime);
           gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
           osc2.start();
           osc2.stop(audioCtx.currentTime + 0.5);
         }, 250);
+
+        // Voice speech call announcements if enabled
+        if (audioEnabled && 'speechSynthesis' in window) {
+          setTimeout(() => {
+            try {
+              window.speechSynthesis.cancel();
+              const text = `Senha de atendimento, ${currentCall.clienteNome}. Favor comparecer ao ${currentCall.localDestino || 'local indicado'}.`;
+              const msg = new SpeechSynthesisUtterance(text);
+              msg.lang = 'pt-BR';
+              msg.rate = 1.05;
+              window.speechSynthesis.speak(msg);
+            } catch (errSpeech) {
+              console.warn("Speech Synthesis blocked:", errSpeech);
+            }
+          }, 900);
+        }
 
       } catch (e) {
         console.log("Audio ding simulado", e);
@@ -79,10 +123,21 @@ export default function TvPanelView({ activeCalls, clients, eventConfig }: TvPan
 
       return () => clearTimeout(timerIdx);
     }
-  }, [currentCall?.id]);
+  }, [currentCall?.id, audioEnabled]);
 
   return (
     <div className="bg-slate-950 text-white min-h-[90vh] flex flex-col justify-between p-6">
+      
+      {/* Banner de permissão de áudio para vencer autoplay policy */}
+      {!audioEnabled && (
+        <div 
+          onClick={enableAudioAndTriggerTest}
+          className="bg-amber-500 hover:bg-amber-450 text-slate-950 font-extrabold text-[11px] sm:text-xs text-center py-2.5 px-4 rounded-xl mb-4 flex items-center justify-center gap-2 cursor-pointer transition-all animate-bounce shadow-md"
+        >
+          <VolumeX className="w-4 h-4 text-slate-950 animate-pulse" />
+          <span>O som do painel está desativado pelo navegador. CLIQUE AQUI para habilitar o Ding-Dong e chamadas de voz automáticas em português!</span>
+        </div>
+      )}
       
       {/* Header do Painel */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-xs gap-4">

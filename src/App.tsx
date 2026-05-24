@@ -209,12 +209,18 @@ export default function App() {
   };
 
   // Criar ou Editar Empreendimento do Catálogo
-  const handleSaveEnterprise = async (id: string | null, name: string): Promise<{ success: boolean; error?: string }> => {
+  const handleSaveEnterprise = async (
+    id: string | null, 
+    name: string, 
+    logoType?: 'ICON' | 'URL', 
+    logoUrl?: string, 
+    logoIconName?: string
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await fetch('/api/enterprises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name })
+        body: JSON.stringify({ id, name, logoType, logoUrl, logoIconName })
       });
       
       let errorMessage = 'Ocorreu um erro ao salvar o empreendimento.';
