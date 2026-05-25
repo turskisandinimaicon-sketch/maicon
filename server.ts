@@ -29,7 +29,7 @@ async function initFirebase() {
       // Mute verbose Firebase console warnings/errors
       setLogLevel('error');
       
-      // Initialize firestore with forced long-polling to prevent persistent gRPC idle stream disconnects
+      // Initialize firestore with forced long-polling to prevent persistent stream/ws disconnects on Node
       db = initializeFirestore(firebaseApp, {
         experimentalForceLongPolling: true,
       }, firebaseConfig.firestoreDatabaseId);
@@ -140,8 +140,12 @@ async function syncFromFirestore() {
     firstSyncCompleted = true;
     console.log("[FIREBASE] Sincronização concluída com sucesso.");
     saveLocalBackup();
-  } catch (err) {
-    console.error("[FIREBASE] Erro ao sincronizar com o Firestore:", err);
+  } catch (err: any) {
+    if (err && err.message && err.message.includes("client is offline")) {
+      console.warn("[FIREBASE] Sincronização offline: mantendo dados ativos do backup local. (O cliente do Firestore está offline ou conectando)");
+    } else {
+      console.error("[FIREBASE] Erro ao sincronizar com o Firestore:", err);
+    }
   }
 }
 

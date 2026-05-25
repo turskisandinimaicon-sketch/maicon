@@ -1,11 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Client } from '../types';
 import * as XLSX from 'xlsx';
 import { 
   FileSpreadsheet, Clipboard, AlertTriangle, HelpCircle, 
   RefreshCw, Check, UploadCloud, ChevronRight, Play, 
-  X, Info, Database, AlertCircle, FileText, CheckCircle2
+  X, Info, Database, AlertCircle, FileText, CheckCircle2,
+  LogOut, ShieldCheck, Link2, Search, ArrowRight, EyeOff
 } from 'lucide-react';
+import { initAuth, googleSignIn, logout } from '../googleAuth';
 
 interface ImportViewProps {
   clients: Client[];
@@ -39,11 +41,64 @@ function formatCPF(cpf: string): string {
 
 export default function ImportView({ clients, onImportData }: ImportViewProps) {
   // Estado de controle das Abas
-  const [activeTab, setActiveTab] = useState<'FILE' | 'PASTE'>('FILE');
+  const [activeTab, setActiveTab] = useState<'FILE' | 'PASTE' | 'SHEETS'>('FILE');
 
   // Estados Comuns para Importação
   const [previewRows, setPreviewRows] = useState<any[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  
+  // Google Sheets & Authentication states
+  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [sheetUrlOrId, setSheetUrlOrId] = useState('');
+  const [spreadsheetId, setSpreadsheetId] = useState('');
+  const [sheetsList, setSheetsList] = useState<string[]>([]);
+  const [selectedSheetTab, setSelectedSheetTab] = useState('');
+  const [isLoadingSheets, setIsLoadingSheets] = useState(false);
+  const [isFetchingRows, setIsFetchingRows] = useState(false);
+
+  // Monitor real-time Google authentication status
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, cachedToken) => {
+        setGoogleUser(user);
+        setToken(cachedToken);
+      },
+      () => {
+        setGoogleUser(null);
+        setToken(null);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    setLoadingGoogle(true);
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setGoogleUser(res.user);
+        setToken(res.accessToken);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Houve uma falha ao autenticar com o Google. Certifique-se de autorizar os acessos.");
+    } finally {
+      setLoadingGoogle(false);
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    await logout();
+    setGoogleUser(null);
+    setToken(null);
+  };
+
+  const extractId = (urlOrId: string) => {
+    const match = urlOrId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    return match ? match[1] : urlOrId.trim();
+  };
   const [isImported, setIsImported] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -198,7 +253,90 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
     }
   ];
 
-  // Algoritmo de Sweep para detectar o cabeçalho e ler planilha
+  // Algoritmo de Sweep compartilhado para auto-detecção fuzzy de colunas e mapeamento
+  const analyzeSheetRowsOnData = (sheetRows: any[][]) => {
+    if (sheetRows.length === 0) {
+      alert("Nenhuma linha útil localizada na planilha selecionada.");
+      return;
+    }
+
+    // Buscar em qual linha os cabeçalhos estão (pode haver linhas decorativas no início)
+    let headerRowIndex = 0;
+    let maxMatchCount = 0;
+    const sweepLimit = Math.min(sheetRows.length, 8); // Verifica as primeiras 8 linhas
+
+    for (let r = 0; r < sweepLimit; r++) {
+      const row = sheetRows[r];
+      if (!row || !Array.isArray(row)) continue;
+
+      let matches = 0;
+      row.forEach(cell => {
+        if (cell !== undefined && cell !== null) {
+          const cellStr = String(cell).toLowerCase().trim();
+          const representsHeader = systemColumns.some(sys => 
+            sys.synonyms.some(syn => cellStr === syn || cellStr.includes(syn))
+          );
+          if (representsHeader) matches++;
+        }
+      });
+
+      if (matches > maxMatchCount) {
+        maxMatchCount = matches;
+        headerRowIndex = r;
+      }
+    }
+
+    // Extrair headers da linha identificada
+    const detectedHeadersRaw = sheetRows[headerRowIndex] || [];
+    const detectedHeaders = detectedHeadersRaw.map((label, index) => ({
+      label: label !== undefined && label !== null ? String(label).trim() : `Coluna ${index + 1}`,
+      index: index
+    })).filter(h => h.label !== "");
+
+    // Obter todas as linhas seguintes como linhas de dados
+    const detectedDataRows = sheetRows.slice(headerRowIndex + 1).filter(row => {
+      return row && row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== "");
+    });
+
+    // Heurística de auto-match inteligente
+    const initialMapping: Record<string, number> = {};
+    systemColumns.forEach(sysCol => {
+      let bestIndex = -1;
+      let bestScore = 0; // Maior score vence
+
+      detectedHeaders.forEach(fHeader => {
+        const labelNorm = fHeader.label.toLowerCase().trim();
+        sysCol.synonyms.forEach(syn => {
+          if (labelNorm === syn) {
+            bestScore = 100;
+            bestIndex = fHeader.index;
+          } else if (bestScore < 80 && (labelNorm.includes(syn) || syn.includes(labelNorm))) {
+            const score = 50 + (syn.length / Math.max(labelNorm.length, 1)) * 30;
+            if (score > bestScore) {
+              bestScore = score;
+              bestIndex = fHeader.index;
+            }
+          }
+        });
+      });
+
+      if (bestIndex !== -1) {
+        initialMapping[sysCol.key] = bestIndex;
+      } else {
+        // Mapping default baseado em índices se não encontrar nada
+        if (sysCol.key === 'nome' && detectedHeaders[0]) initialMapping.nome = detectedHeaders[0].index;
+        if (sysCol.key === 'cpf' && detectedHeaders[1]) initialMapping.cpf = detectedHeaders[1].index;
+      }
+    });
+
+    setFileHeaders(detectedHeaders);
+    setFileDataRows(detectedDataRows);
+    setColumnMapping(initialMapping);
+    setPreviewRows([]);
+    setWarnings([]);
+    setIsImported(false);
+  };
+
   const processUploadedFile = (file: File) => {
     setUploadedFileName(file.name);
     const reader = new FileReader();
@@ -232,86 +370,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
           });
         }
         
-        if (sheetRows.length === 0) {
-          alert("Nenhuma linha útil localizada na planilha selecionada.");
-          return;
-        }
-
-        // Buscar em qual linha os cabeçalhos estão (pode haver linhas decorativas no início)
-        let headerRowIndex = 0;
-        let maxMatchCount = 0;
-        const sweepLimit = Math.min(sheetRows.length, 8); // Verifica as primeiras 8 linhas
-
-        for (let r = 0; r < sweepLimit; r++) {
-          const row = sheetRows[r];
-          if (!row || !Array.isArray(row)) continue;
-
-          let matches = 0;
-          row.forEach(cell => {
-            if (cell !== undefined && cell !== null) {
-              const cellStr = String(cell).toLowerCase().trim();
-              const representsHeader = systemColumns.some(sys => 
-                sys.synonyms.some(syn => cellStr === syn || cellStr.includes(syn))
-              );
-              if (representsHeader) matches++;
-            }
-          });
-
-          if (matches > maxMatchCount) {
-            maxMatchCount = matches;
-            headerRowIndex = r;
-          }
-        }
-
-        // Extrair headers da linha identificada
-        const detectedHeadersRaw = sheetRows[headerRowIndex] || [];
-        const detectedHeaders = detectedHeadersRaw.map((label, index) => ({
-          label: label !== undefined && label !== null ? String(label).trim() : `Coluna ${index + 1}`,
-          index: index
-        })).filter(h => h.label !== "");
-
-        // Obter todas as linhas seguintes como linhas de dados
-        const detectedDataRows = sheetRows.slice(headerRowIndex + 1).filter(row => {
-          return row && row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== "");
-        });
-
-        // Heurística de auto-match inteligente
-        const initialMapping: Record<string, number> = {};
-        systemColumns.forEach(sysCol => {
-          let bestIndex = -1;
-          let bestScore = 0; // Maior score vence
-
-          detectedHeaders.forEach(fHeader => {
-            const labelNorm = fHeader.label.toLowerCase().trim();
-            sysCol.synonyms.forEach(syn => {
-              if (labelNorm === syn) {
-                bestScore = 100;
-                bestIndex = fHeader.index;
-              } else if (bestScore < 80 && (labelNorm.includes(syn) || syn.includes(labelNorm))) {
-                const score = 50 + (syn.length / Math.max(labelNorm.length, 1)) * 30;
-                if (score > bestScore) {
-                  bestScore = score;
-                  bestIndex = fHeader.index;
-                }
-              }
-            });
-          });
-
-          if (bestIndex !== -1) {
-            initialMapping[sysCol.key] = bestIndex;
-          } else {
-            // Mapping default baseado em índices se não encontrar nada
-            if (sysCol.key === 'nome' && detectedHeaders[0]) initialMapping.nome = detectedHeaders[0].index;
-            if (sysCol.key === 'cpf' && detectedHeaders[1]) initialMapping.cpf = detectedHeaders[1].index;
-          }
-        });
-
-        setFileHeaders(detectedHeaders);
-        setFileDataRows(detectedDataRows);
-        setColumnMapping(initialMapping);
-        setPreviewRows([]);
-        setWarnings([]);
-        setIsImported(false);
+        analyzeSheetRowsOnData(sheetRows);
 
       } catch (err) {
         console.error(err);
@@ -320,6 +379,91 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
     };
 
     reader.readAsArrayBuffer(file);
+  };
+
+  // Carregar e verificar Abas da Planilha via Google Sheets API (V4)
+  const handleVerifySpreadsheet = async () => {
+    if (!sheetUrlOrId.trim()) {
+      alert("Por favor, informe a URL ou ID da planilha do Google.");
+      return;
+    }
+    const id = extractId(sheetUrlOrId);
+    if (!id) {
+      alert("Não foi possível identificar o ID da planilha na URL fornecida.");
+      return;
+    }
+    
+    setSpreadsheetId(id);
+    setIsLoadingSheets(true);
+    setSheetsList([]);
+    setSelectedSheetTab('');
+
+    try {
+      const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(errText || "Planilha não encontrada ou sem permissão de acesso.");
+      }
+
+      const data = await resp.json();
+      if (data.sheets && data.sheets.length > 0) {
+        const tabs = data.sheets.map((s: any) => s.properties.title as string);
+        setSheetsList(tabs);
+        setSelectedSheetTab(tabs[0]);
+      } else {
+        alert("Nenhuma aba/página localizada nessa planilha.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao verificar planilha:", err);
+      alert(`Falha ao acessar a planilha do Google Sheets.\nVerifique se o ID/Link está correto e se sua conta do Google tem acesso corporativo/pessoal a esta planilha.\n\nDetalhes: ${err.message || String(err)}`);
+    } finally {
+      setIsLoadingSheets(false);
+    }
+  };
+
+  // Carregar linhas de dados contidos na Aba selecionada do Google Sheets
+  const handleFetchSpreadsheetRows = async () => {
+    if (!spreadsheetId || !selectedSheetTab) {
+      alert("Por favor, verifique a planilha e escolha uma aba primeiro.");
+      return;
+    }
+
+    setIsFetchingRows(true);
+    try {
+      const range = encodeURIComponent(selectedSheetTab);
+      const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(errText || "Não foi possível carregar os registros da aba selecionada.");
+      }
+
+      const data = await resp.json();
+      if (data.values && data.values.length > 0) {
+        const sheetRows: any[][] = data.values;
+        setUploadedFileName(`Google Sheets: "${selectedSheetTab}"`);
+        
+        analyzeSheetRowsOnData(sheetRows);
+
+        alert(`Carregados com sucesso ${sheetRows.length} registros do Google Sheets! Agora ajuste as correspondências na tela.`);
+      } else {
+        alert("A aba selecionada não possui dados válidos preenchidos.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao carregar linhas da planilha:", err);
+      alert(`Erro ao buscar dados do Google Sheets: ${err.message || String(err)}`);
+    } finally {
+      setIsFetchingRows(false);
+    }
   };
 
   // Drag and Drop Handles
@@ -507,7 +651,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
       </div>
 
       {/* Seletor de Abas */}
-      <div className="flex border-b border-gray-200 gap-1.5 p-1 bg-slate-100/70 rounded-lg max-w-md">
+      <div className="flex border-b border-gray-200 gap-1.5 p-1 bg-slate-100/70 rounded-lg max-w-lg">
         <button
           onClick={() => {
             setActiveTab('FILE');
@@ -519,7 +663,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
           }`}
         >
           <FileSpreadsheet className="w-4 h-4" />
-          Importar Arquivo (.xlsx, .csv, .xls)
+          Planilha (.xlsx, .csv)
         </button>
         <button
           onClick={() => {
@@ -532,7 +676,22 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
           }`}
         >
           <Clipboard className="w-4 h-4" />
-          Copiar e Colar Texto
+          Colar Texto
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('SHEETS');
+            setPreviewRows([]);
+            setWarnings([]);
+          }}
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'SHEETS' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <svg className="w-4 h-4 text-emerald-600 fill-emerald-600/10" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Google Sheets
         </button>
       </div>
 
@@ -709,7 +868,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
               )}
 
             </div>
-          ) : (
+          ) : activeTab === 'PASTE' ? (
             /* ABA 2: COPIAR E COLAR MANUAL */
             <div className="bg-white rounded-xl border border-gray-150 p-5 space-y-4 shadow-xs">
               
@@ -749,6 +908,148 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
               >
                 Analisar Texto Copiado
               </button>
+
+            </div>
+          ) : (
+            /* ABA 3: GOOGLE SHEETS COM AUTENTICAÇÃO REAL EM TEMPO REAL */
+            <div className="space-y-4">
+              
+              {/* Status de Autenticação */}
+              {!googleUser ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-xs flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="p-3 bg-emerald-50 rounded-full text-emerald-600 border border-emerald-100">
+                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  
+                  <div className="space-y-1 max-w-sm">
+                    <h3 className="text-sm font-bold text-slate-850">Conectar Google Sheets</h3>
+                    <p className="text-xxs text-gray-500 leading-normal">
+                      Sincronize com segurança seu banco de dados de compradores hospedado no Google Drive. Seus dados cadastrais serão lidos com permissão de forma 100% dinâmica.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleGoogleLogin}
+                    disabled={loadingGoogle}
+                    className="flex items-center gap-3 bg-white hover:bg-slate-50 text-slate-705 font-semibold border border-gray-250 rounded-lg px-4 py-2.5 shadow-xs transition-all text-xs w-full max-w-xs justify-center cursor-pointer disabled:opacity-55"
+                  >
+                    {loadingGoogle ? (
+                      <RefreshCw className="w-5 h-5 animate-spin text-emerald-600" />
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 shrink-0" viewBox="0 0 48 48">
+                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                        </svg>
+                        <span>Entrar com o Google</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Card Conta Ativa */}
+                  <div className="bg-emerald-50/40 rounded-xl border border-emerald-100 p-4 flex justify-between items-center gap-4 text-xs">
+                    <div className="flex items-center gap-2.5">
+                      {googleUser.photoURL ? (
+                        <img referrerPolicy="no-referrer" src={googleUser.photoURL} alt="Avatar" className="w-8 h-8 rounded-full border border-emerald-200" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-emerald-600/10 text-emerald-800 font-bold flex items-center justify-center uppercase">
+                          {googleUser.displayName?.charAt(0) || googleUser.email?.charAt(0) || 'G'}
+                        </div>
+                      )}
+                      <div>
+                        <span className="font-bold text-slate-800 block truncate max-w-[190px]">Conectado como {googleUser.displayName || 'Google User'}</span>
+                        <span className="text-[10px] text-emerald-800 font-medium block truncate max-w-[190px]">{googleUser.email}</span>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={handleGoogleLogout}
+                      className="text-red-650 hover:bg-red-50 p-1.5 rounded-lg border border-red-100 flex items-center gap-1 font-bold text-xxs transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      Sair da Conta
+                    </button>
+                  </div>
+
+                  {/* Detalhes do Documento */}
+                  <div className="bg-white rounded-xl border border-gray-150 p-5 space-y-4 shadow-xs">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Link2 className="w-4 h-4 text-emerald-600" />
+                      URL ou ID da Planilha do Google
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Cole o link da planilha ou apenas o ID"
+                        value={sheetUrlOrId}
+                        onChange={(e) => setSheetUrlOrId(e.target.value)}
+                        className="flex-1 bg-slate-50 border border-gray-250 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-mono"
+                      />
+                      <button
+                        onClick={handleVerifySpreadsheet}
+                        disabled={isLoadingSheets || !sheetUrlOrId.trim()}
+                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 cursor-pointer select-none transition-colors"
+                      >
+                        {isLoadingSheets ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                        Verificar
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Abra a planilha no seu Google Drive, copie o link completo na barra de endereços e cole acima. Seus dados nunca são armazenados, servindo apenas para análise nesta tela.
+                    </p>
+                  </div>
+
+                  {/* Seletor de Abas Localizadas */}
+                  {sheetsList.length > 0 && (
+                    <div className="bg-white rounded-xl border border-emerald-150 p-5 space-y-4 shadow-xs animate-fade-in">
+                      <div>
+                        <span className="text-xs font-bold text-slate-850 block flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          Planilha Verificada! Selecione a Aba
+                        </span>
+                        <span className="text-[10px] text-slate-500">Escolha a folha/página da planilha que contém a tabela de clientes</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+                        <select
+                          value={selectedSheetTab}
+                          onChange={(e) => setSelectedSheetTab(e.target.value)}
+                          className="bg-slate-50 border border-emerald-200 text-slate-800 rounded-lg p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {sheetsList.map((tab, idx) => (
+                            <option key={idx} value={tab}>{tab}</option>
+                          ))}
+                        </select>
+
+                        <button
+                          onClick={handleFetchSpreadsheetRows}
+                          disabled={isFetchingRows || !selectedSheetTab}
+                          className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 transition-colors"
+                        >
+                          {isFetchingRows ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                              Lendo Planilha...
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                              Carregar Compradores
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
 
             </div>
           )}
