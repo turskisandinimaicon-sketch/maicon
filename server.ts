@@ -12,6 +12,16 @@ const PORT = 3000;
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
+// Lazy initialization of Firebase/Backup for Vercel/Cloud Run
+app.use(async (req, res, next) => {
+  try {
+    await lazyInitialize();
+  } catch (err) {
+    console.error("[INIT] Falha no lazyInitialize executando rota:", err);
+  }
+  next();
+});
+
 // Firebase initialization settings
 let db: any = null;
 let useFirebase = false;
@@ -341,6 +351,316 @@ function loadLocalBackup() {
   }
 }
 
+// --- GOOGLE SHEETS BACKEND INTEGRATION WITH EXPONENTIAL BACKOFF ---
+interface GoogleSheetsSyncResult {
+  success: boolean;
+  importedCount?: number;
+  updatedCount?: number;
+  error?: string;
+}
+
+async function syncFromGoogleSheets(
+  customSpreadsheetId?: string,
+  customApiKey?: string,
+  customRange?: string
+): Promise<GoogleSheetsSyncResult> {
+  const spreadsheetId = customSpreadsheetId || 
+                        process.env.GOOGLE_SPREADSHEET_ID || 
+                        process.env.SPREADSHEET_ID || 
+                        (eventConfig as any).googleSheetsSpreadsheetId;
+                        
+  const apiKey = customApiKey || 
+                 process.env.GOOGLE_SHEETS_API_KEY || 
+                 process.env.GOOGLE_API_KEY || 
+                 process.env.CHAVE_BACKOFF ||
+                 (eventConfig as any).googleSheetsApiKey;
+
+  const range = customRange || 
+                (eventConfig as any).googleSheetsRange || 
+                "A1:Z1000";
+
+  if (!spreadsheetId) {
+    return { success: false, error: "Nenhum ID da planilha configurado no servidor ou recebido do painel." };
+  }
+  if (!apiKey) {
+    return { success: false, error: "Nenhuma Chave API (chave backoff) do Google configurada no servidor." };
+  }
+
+  // Linear / Exponential Backoff retry utility
+  async function fetchWithBackoff(url: string, retries = 5, delay = 1000): Promise<any> {
+    try {
+      const resp = await fetch(url);
+      if (resp.status === 429 || (resp.status >= 500 && resp.status < 600)) {
+        if (retries > 0) {
+          console.warn(`[BACKOFF] Servidor Google retornou status ${resp.status}. Aplicando recuo técnico (backoff) de ${delay}ms... (${retries} tentativas restantes)`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return fetchWithBackoff(url, retries - 1, delay * 2);
+        }
+      }
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Google API erro ${resp.status}: ${errText}`);
+      }
+      return await resp.json();
+    } catch (e: any) {
+      if (retries > 0) {
+        console.warn(`[BACKOFF] Falha na rede ou limite de cota: ${e.message}. Aplicando recuo técnico (backoff) de ${delay}ms... (${retries} tentativas restantes)`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchWithBackoff(url, retries - 1, delay * 2);
+      }
+      throw e;
+    }
+  }
+
+  try {
+    const encodedRange = encodeURIComponent(range);
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?valueRenderOption=FORMATTED_VALUE&key=${apiKey}`;
+    
+    console.log(`[SHEETS] Conectando à Planilha ${spreadsheetId} usando Chave Backoff.`);
+    const data = await fetchWithBackoff(url);
+    
+    if (!data.values || data.values.length === 0) {
+      return { success: false, error: "Estrutura vazia ou dados não encontrados na planilha selecionada." };
+    }
+
+    const sheetRows: any[][] = data.values;
+    
+    // Heurística de sinônimos idênticos ao front-end para auto-mapeamento
+    const systemColumns = [
+      { key: 'nome', synonyms: ['nome', 'name', 'comprador', 'cliente', 'proprietario', 'titular', 'full name', 'fullname', 'nome completo', 'nome do cliente', 'nome do comprador'] },
+      { key: 'cpf', synonyms: ['cpf', 'cnpj', 'documento', 'doc', 'cpf/cnpj', 'tax id', 'n_documento', 'id', 'cadastro de pessoa fisica'] },
+      { key: 'empreendimento', synonyms: ['empreendimento', 'condominio', 'obra', 'projeto', 'residencial', 'building', 'condo', 'enterprise', 'nome do residencial', 'nome da obra'] },
+      { key: 'bloco', synonyms: ['bloco', 'torre', 'quadra', 'block', 'tower', 'setor', 'fase'] },
+      { key: 'unidade', synonyms: ['unidade', 'apartamento', 'apto', 'ap', 'casa', 'lote', 'sala', 'unit', 'apartment', 'número da unidade'] },
+      { key: 'telefone', synonyms: ['telefone', 'tel', 'celular', 'cel', 'contato', 'phone', 'mobile', 'telephone', 'whatsapp', 'whats'] },
+      { key: 'email', synonyms: ['email', 'e-mail', 'mail', 'endereço eletrônico', 'electronic mail'] },
+      { key: 'statusContratual', synonyms: ['status', 'status contratual', 'situacao', 'contrato', 'statuscontratual', 'financeiro', 'pagamento', 'payment', 'quitado', 'situacao financeira'] }
+    ];
+
+    let headerRowIndex = 0;
+    let maxMatchCount = 0;
+    const sweepLimit = Math.min(sheetRows.length, 10);
+
+    for (let r = 0; r < sweepLimit; r++) {
+      const row = sheetRows[r];
+      if (!row || !Array.isArray(row)) continue;
+
+      let matches = 0;
+      row.forEach(cell => {
+        if (cell !== undefined && cell !== null) {
+          const cellStr = String(cell).toLowerCase().trim();
+          const representsHeader = systemColumns.some(sys => 
+            sys.synonyms.some(syn => cellStr === syn || cellStr.includes(syn))
+          );
+          if (representsHeader) matches++;
+        }
+      });
+
+      if (matches > maxMatchCount) {
+        maxMatchCount = matches;
+        headerRowIndex = r;
+      }
+    }
+
+    const headersRaw = sheetRows[headerRowIndex] || [];
+    const headers = headersRaw.map((h, i) => ({
+      label: h !== undefined && h !== null ? String(h).toLowerCase().trim() : "",
+      index: i
+    })).filter(h => h.label !== "");
+
+    const mapping: Record<string, number> = {};
+    systemColumns.forEach(sysCol => {
+      let bestIndex = -1;
+      let     bestScore = 0;
+
+      headers.forEach(h => {
+        sysCol.synonyms.forEach(syn => {
+          if (h.label === syn) {
+            bestScore = 100;
+            bestIndex = h.index;
+          } else if (bestScore < 80 && (h.label.includes(syn) || syn.includes(h.label))) {
+            const score = 50 + (syn.length / Math.max(h.label.length, 1)) * 30;
+            if (score > bestScore) {
+              bestScore = score;
+              bestIndex = h.index;
+            }
+          }
+        });
+      });
+
+      if (bestIndex !== -1) {
+        mapping[sysCol.key] = bestIndex;
+      }
+    });
+
+    if (mapping.nome === undefined && headers[0]) mapping.nome = headers[0].index;
+    if (mapping.cpf === undefined && headers[1]) mapping.cpf = headers[1].index;
+
+    if (mapping.nome === undefined || mapping.cpf === undefined) {
+      return { success: false, error: "Formato incompatível: Colunas obrigatórias Nome e CPF não foram localizadas na planilha." };
+    }
+
+    const dataRows = sheetRows.slice(headerRowIndex + 1);
+    let imported = 0;
+    let updated = 0;
+
+    const updatedClients = [...clients];
+
+    const cleanStr = (val: any) => {
+      if (val === undefined || val === null) return "";
+      let str = String(val).trim();
+      while (str.startsWith('"') && str.endsWith('"') && str.length > 1) {
+        str = str.substring(1, str.length - 1).trim();
+      }
+      return str;
+    };
+
+    const formatCpf = (val: string) => {
+      const clean = val.replace(/\D/g, '');
+      if (clean.length === 11) {
+        return `${clean.substring(0, 3)}.${clean.substring(3, 6)}.${clean.substring(6, 9)}-${clean.substring(9)}`;
+      }
+      return val;
+    };
+
+    const newClientsToAdd: Client[] = [];
+
+    for (const row of dataRows) {
+      if (!row || row.length === 0) continue;
+      
+      const getVal = (key: string): string => {
+        const idx = mapping[key];
+        if (idx === undefined || idx === -1) return "";
+        return cleanStr(row[idx]);
+      };
+
+      const nome = getVal('nome');
+      const rawCpf = getVal('cpf');
+      const cpfClean = rawCpf.replace(/\D/g, '');
+
+      if (!nome || !cpfClean || cpfClean.length < 5) continue;
+
+      const formattedCpf = formatCpf(cpfClean);
+      const empreendimento = getVal('empreendimento') || eventConfig.enterpriseName || "Residencial Canto das Flores";
+      const bloco = getVal('bloco') || "Bloco A";
+      const unidade = getVal('unidade') || "Unidade Geral";
+      const telefone = getVal('telefone') || "(11) 99999-9999";
+      const email = getVal('email') || "contato@cliente.com";
+      
+      let statusContratualRaw = getVal('statusContratual').toUpperCase();
+      let statusContratual: 'QUITADO' | 'PENDENTE_FINANCIAMENTO' | 'EM_ANALISE' = 'QUITADO';
+      if (statusContratualRaw.includes('PENDENTE') || statusContratualRaw.includes('FINANCIAMENTO') || statusContratualRaw.includes('DEVEDOR')) {
+        statusContratual = 'PENDENTE_FINANCIAMENTO';
+      } else if (statusContratualRaw.includes('ANALISE') || statusContratualRaw.includes('ANÁLISE')) {
+        statusContratual = 'EM_ANALISE';
+      }
+
+      const existingIndex = updatedClients.findIndex(c => c.cpf && c.cpf.replace(/\D/g, '') === cpfClean);
+
+      if (existingIndex !== -1) {
+        // Atualiza cadastro mas mantém fila e estados operacionais intocados
+        updatedClients[existingIndex] = {
+          ...updatedClients[existingIndex],
+          nome,
+          empreendimento,
+          bloco,
+          unidade,
+          telefone,
+          email,
+          statusContratual
+        };
+        await updatedClientFirebaseOnly(updatedClients[existingIndex]);
+        updated++;
+      } else {
+        const newClient: Client = {
+          id: "c-" + generateId(),
+          nome,
+          cpf: formattedCpf,
+          empreendimento,
+          bloco,
+          unidade,
+          telefone,
+          email,
+          statusContratual,
+          status: "AGUARDANDO_RECEPCAO",
+          priority: "NORMAL",
+          possuiProcurador: false,
+          possuiVistoriadorProprio: false,
+          liberadoParaVistoria: false,
+          documentos: []
+        };
+        newClientsToAdd.push(newClient);
+        updatedClients.push(newClient);
+        imported++;
+      }
+    }
+
+    if (newClientsToAdd.length > 0) {
+      if (useFirebase && db) {
+        const savePromises = newClientsToAdd.map(c => saveClientFirebaseOnly(c));
+        await Promise.all(savePromises);
+      }
+    }
+
+    clients = updatedClients;
+    saveLocalBackup();
+
+    let configUpdated = false;
+    if (customSpreadsheetId && (eventConfig as any).googleSheetsSpreadsheetId !== customSpreadsheetId) {
+      (eventConfig as any).googleSheetsSpreadsheetId = customSpreadsheetId;
+      configUpdated = true;
+    }
+    if (customApiKey && (eventConfig as any).googleSheetsApiKey !== customApiKey) {
+      (eventConfig as any).googleSheetsApiKey = customApiKey;
+      configUpdated = true;
+    }
+    if (customRange && (eventConfig as any).googleSheetsRange !== customRange) {
+      (eventConfig as any).googleSheetsRange = customRange;
+      configUpdated = true;
+    }
+
+    if (configUpdated) {
+      await saveEventConfig();
+    }
+
+    return { success: true, importedCount: imported, updatedCount: updated };
+
+  } catch (err: any) {
+    console.error("[SHEETS] Erro ao sincronizar Google Sheets:", err);
+    return { success: false, error: "Erro na conexão com Google Sheets API: " + (err.message || String(err)) };
+  }
+}
+
+// Auxiliar para atualizar compradores individualmente no Firestore sob demanda
+async function updatedClientFirebaseOnly(c: Client) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "clients", c.id), c);
+    } catch (e) {
+      console.error("[FIREBASE] Erro ao salvar cadastro atualizado da planilha:", e);
+    }
+  }
+}
+
+let wasInitialized = false;
+async function lazyInitialize() {
+  if (wasInitialized) return;
+  wasInitialized = true;
+  loadLocalBackup();
+  await initFirebase();
+  
+  // Tenta sincronizar do Google Sheets se as chaves estiverem configuradas no ambiente
+  const hasSheetKeys = process.env.GOOGLE_SPREADSHEET_ID && (process.env.GOOGLE_SHEETS_API_KEY || process.env.GOOGLE_API_KEY || process.env.CHAVE_BACKOFF);
+  if (hasSheetKeys) {
+    console.log("[INIT] Credenciais do Google Sheets encontradas no servidor. Iniciando sincronização em tempo real.");
+    try {
+      await syncFromGoogleSheets();
+    } catch (e) {
+      console.error("[INIT] Falha na sincronização inicial do Google Sheets:", e);
+    }
+  }
+}
+
 // --- AUXILIARY FUNCTIONS ---
 function generateId() {
   return Math.random().toString(36).substring(2, 9);
@@ -505,6 +825,56 @@ app.delete("/api/enterprises/:id", async (req, res) => {
   } catch (err: any) {
     console.error("Erro em DELETE /api/enterprises:", err);
     res.status(500).json({ error: "Erro interno no servidor: " + (err.message || String(err)) });
+  }
+});
+
+// Google Sheets Backend API Endpoints
+app.post("/api/sheets/sync", async (req, res) => {
+  try {
+    const { spreadsheetId, apiKey, range } = req.body;
+    
+    console.log("[SHEETS ROUTE] Solicitando sincronização manual do Google Sheets");
+    const result = await syncFromGoogleSheets(spreadsheetId, apiKey, range);
+    
+    if (result.success) {
+      logAction("Servidor", "ADMIN", "Sincronização Google Sheets", `Processado via Backend. Importados: ${result.importedCount}, Atualizados: ${result.updatedCount}`);
+      res.json({
+        success: true,
+        importedCount: result.importedCount,
+        updatedCount: result.updatedCount,
+        clients
+      });
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err: any) {
+    console.error("[SHEETS ROUTE] Falha crítica de sincronização:", err);
+    res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
+app.get("/api/sheets/config", async (req, res) => {
+  try {
+    const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || 
+                          process.env.SPREADSHEET_ID || 
+                          (eventConfig as any).googleSheetsSpreadsheetId || "";
+                          
+    const apiKey = process.env.GOOGLE_SHEETS_API_KEY || 
+                   process.env.GOOGLE_API_KEY || 
+                   process.env.CHAVE_BACKOFF ||
+                   (eventConfig as any).googleSheetsApiKey || "";
+
+    const range = (eventConfig as any).googleSheetsRange || "A1:Z1000";
+
+    res.json({
+      hasSpreadsheetId: !!spreadsheetId,
+      hasApiKey: !!apiKey,
+      spreadsheetId: spreadsheetId ? `${spreadsheetId.substring(0, 7)}...${spreadsheetId.substring(spreadsheetId.length - 7)}` : "",
+      range,
+      customApiKeyLength: apiKey ? apiKey.length : 0
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || String(err) });
   }
 });
 

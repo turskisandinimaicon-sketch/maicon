@@ -73,6 +73,72 @@ export default function ImportView({ clients, onImportData }: ImportViewProps) {
     return () => unsubscribe();
   }, []);
 
+  // --- BACKEND GOOGLE SHEETS SYNC INTEGRATION STATES ---
+  const [backendConfig, setBackendConfig] = useState<{
+    hasSpreadsheetId: boolean;
+    hasApiKey: boolean;
+    spreadsheetId: string;
+    range: string;
+    customApiKeyLength: number;
+  } | null>(null);
+  const [backendSpreadsheetId, setBackendSpreadsheetId] = useState('');
+  const [backendApiKey, setBackendApiKey] = useState('');
+  const [backendRange, setBackendRange] = useState('A1:Z1000');
+  const [isSyncingBackend, setIsSyncingBackend] = useState(false);
+
+  const fetchBackendConfig = async () => {
+    try {
+      const resp = await fetch('/api/sheets/config');
+      if (resp.ok) {
+        const data = await resp.json();
+        setBackendConfig(data);
+        if (data.range) setBackendRange(data.range);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar configuracoes do Google Sheets:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchBackendConfig();
+  }, [activeTab]);
+
+  const handleSyncBackendSheets = async (customSpreadsheet?: string, customApi?: string, customRangeStr?: string) => {
+    setIsSyncingBackend(true);
+    try {
+      const bodyPayload = {
+        spreadsheetId: customSpreadsheet || backendSpreadsheetId || undefined,
+        apiKey: customApi || backendApiKey || undefined,
+        range: customRangeStr || backendRange || undefined
+      };
+      
+      const resp = await fetch('/api/sheets/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      });
+      
+      const data = await resp.json();
+      if (resp.ok && data.success) {
+        alert(`Google Sheets sincronizado com sucesso pelo backend!\n\nImportados: ${data.importedCount} novos compradores\nAtualizados: ${data.updatedCount} cadastros atualizados.`);
+        // Disparar atualização global dos clientes
+        if (onImportData) {
+          await onImportData([]);
+        }
+        setBackendApiKey('');
+        setBackendSpreadsheetId('');
+        fetchBackendConfig();
+      } else {
+        alert(`Erro de sincronização técnica: ${data.error || "Formato incompatível ou credenciais inválidas."}`);
+      }
+    } catch (err: any) {
+      console.error("Erro na sincronização:", err);
+      alert("Falha técnica ao tentar sincronizar dados com o Google Sheets: " + err.message);
+    } finally {
+      setIsSyncingBackend(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setLoadingGoogle(true);
     try {
@@ -801,144 +867,248 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
             </div>
           ) : (
             /* ABA 3: GOOGLE SHEETS COM AUTENTICAÇÃO REAL EM TEMPO REAL */
-            <div className="space-y-4">
+            <div className="space-y-5">
               
-              {/* Status de Autenticação */}
-              {!googleUser ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-xs flex flex-col items-center justify-center text-center space-y-4">
-                  <div className="p-3 bg-emerald-50 rounded-full text-emerald-600 border border-emerald-100">
-                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
+              {/* SEÇÃO 1: CONEXÃO Headless DO SERVIDOR (CHAVE BACKOFF & VERCEL PERMANENTE) */}
+              <div className="bg-white rounded-xl border border-emerald-150 p-6 space-y-4 shadow-xs relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+                
+                <div className="flex justify-between items-start gap-4">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-bold text-slate-850 flex items-center gap-2">
+                      <Database className="w-4 h-4 text-emerald-600" />
+                      Sincronização Dinâmica do Servidor (Chave Backoff)
+                    </h3>
+                    <p className="text-xxs text-slate-500 max-w-xl leading-relaxed">
+                      Este método utiliza uma chave de API segura no Vercel/Cloud Run estruturada com retry-backoff automático. Os compradores permanecem sempre conectados e em tempo real, sem necessidade de autenticação no navegador por parte de cada operador.
+                    </p>
                   </div>
                   
-                  <div className="space-y-1 max-w-sm">
-                    <h3 className="text-sm font-bold text-slate-850">Conectar Google Sheets</h3>
-                    <p className="text-xxs text-gray-500 leading-normal">
-                      Sincronize com segurança seu banco de dados de compradores hospedado no Google Drive. Seus dados cadastrais serão lidos com permissão de forma 100% dinâmica.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={handleGoogleLogin}
-                    disabled={loadingGoogle}
-                    className="flex items-center gap-3 bg-white hover:bg-slate-50 text-slate-705 font-semibold border border-gray-250 rounded-lg px-4 py-2.5 shadow-xs transition-all text-xs w-full max-w-xs justify-center cursor-pointer disabled:opacity-55"
-                  >
-                    {loadingGoogle ? (
-                      <RefreshCw className="w-5 h-5 animate-spin text-emerald-600" />
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5 shrink-0" viewBox="0 0 48 48">
-                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                        </svg>
-                        <span>Entrar com o Google</span>
-                      </>
-                    )}
-                  </button>
+                  {backendConfig?.hasSpreadsheetId && backendConfig?.hasApiKey ? (
+                    <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xxs font-bold bg-emerald-50 text-emerald-700 border border-emerald-250 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Sempre Conectado
+                    </span>
+                  ) : (
+                    <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xxs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      Pendente de Chave
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Card Conta Ativa */}
-                  <div className="bg-emerald-50/40 rounded-xl border border-emerald-100 p-4 flex justify-between items-center gap-4 text-xs">
-                    <div className="flex items-center gap-2.5">
-                      {googleUser.photoURL ? (
-                        <img referrerPolicy="no-referrer" src={googleUser.photoURL} alt="Avatar" className="w-8 h-8 rounded-full border border-emerald-200" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-emerald-600/10 text-emerald-800 font-bold flex items-center justify-center uppercase">
-                          {googleUser.displayName?.charAt(0) || googleUser.email?.charAt(0) || 'G'}
-                        </div>
-                      )}
-                      <div>
-                        <span className="font-bold text-slate-800 block truncate max-w-[190px]">Conectado como {googleUser.displayName || 'Google User'}</span>
-                        <span className="text-[10px] text-emerald-800 font-medium block truncate max-w-[190px]">{googleUser.email}</span>
-                      </div>
+
+                {backendConfig?.hasSpreadsheetId && backendConfig?.hasApiKey && (
+                  <div className="bg-slate-50 rounded-lg p-4 border border-gray-150 grid grid-cols-1 md:grid-cols-3 gap-3 text-xxs">
+                    <div className="space-y-0.5">
+                      <span className="text-slate-500 font-medium block">Planilha do Google ativa:</span>
+                      <span className="text-slate-800 font-bold font-mono truncate block">{backendConfig.spreadsheetId}</span>
                     </div>
+                    <div className="space-y-0.5">
+                      <span className="text-slate-500 font-medium block">Intervalo de Leitura:</span>
+                      <span className="text-slate-800 font-bold font-mono block">{backendConfig.range}</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-slate-500 font-medium block">Mecanismo Resiliente:</span>
+                      <span className="text-emerald-700 font-bold block flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" /> Google API + Backoff Ativo
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* AÇÕES DE SINCRONIZAÇÃO DO BACKEND */}
+                {backendConfig?.hasSpreadsheetId && backendConfig?.hasApiKey && (
+                  <div className="flex border-t border-slate-100 pt-4 justify-between items-center gap-3">
+                    <span className="text-[10px] text-slate-500">
+                      Ideal para trazer o cadastro das vendas do estande atualizadas na hora para o credenciamento.
+                    </span>
                     
                     <button
-                      onClick={handleGoogleLogout}
-                      className="text-red-650 hover:bg-red-50 p-1.5 rounded-lg border border-red-100 flex items-center gap-1 font-bold text-xxs transition-colors cursor-pointer"
+                      onClick={() => handleSyncBackendSheets()}
+                      disabled={isSyncingBackend}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-2.5 px-5 rounded-lg text-xs flex items-center gap-2 cursor-pointer select-none transition-all shadow-xs"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
-                      Sair da Conta
+                      {isSyncingBackend ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          Sincronizando com Backoff...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Sincronizar Base do Google Sheets agora
+                        </>
+                      )}
                     </button>
                   </div>
+                )}
 
-                  {/* Detalhes do Documento */}
-                  <div className="bg-white rounded-xl border border-gray-150 p-5 space-y-4 shadow-xs">
-                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Link2 className="w-4 h-4 text-emerald-600" />
-                      URL ou ID da Planilha do Google
-                    </label>
-                    <div className="flex gap-2">
+                {/* FORMULÁRIO DE ATUALIZAÇÃO / CONFIGURAÇÃO DE CREDENCIAIS */}
+                <div className="border-t border-slate-150/80 pt-4 space-y-3">
+                  <span className="text-xxs font-bold text-slate-700 block uppercase tracking-wider">
+                    {backendConfig?.hasSpreadsheetId ? "Atualizar Configurações do Servidor" : "Definir Configurações do Servidor"}
+                  </span>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-750 block">ID ou Link da Planilha do Google</label>
                       <input
                         type="text"
-                        placeholder="Cole o link da planilha ou apenas o ID"
-                        value={sheetUrlOrId}
-                        onChange={(e) => setSheetUrlOrId(e.target.value)}
-                        className="flex-1 bg-slate-50 border border-gray-250 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-mono"
+                        placeholder="Ex: 1z_X_Dq... ou URL inteira"
+                        value={backendSpreadsheetId}
+                        onChange={(e) => setBackendSpreadsheetId(e.target.value)}
+                        className="w-full bg-slate-50/50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-mono"
                       />
-                      <button
-                        onClick={handleVerifySpreadsheet}
-                        disabled={isLoadingSheets || !sheetUrlOrId.trim()}
-                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 cursor-pointer select-none transition-colors"
-                      >
-                        {isLoadingSheets ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                        Verificar
-                      </button>
                     </div>
-                    <p className="text-[10px] text-slate-500 leading-normal">
-                      Abra a planilha no seu Google Drive, copie o link completo na barra de endereços e cole acima. Seus dados nunca são armazenados, servindo apenas para análise nesta tela.
-                    </p>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-750 block">Chave API do Google (Chave Backoff)</label>
+                      <input
+                        type="password"
+                        placeholder={backendConfig?.hasApiKey ? "••••••••••••••••••••••••" : "Cole a Google API Key do projeto"}
+                        value={backendApiKey}
+                        onChange={(e) => setBackendApiKey(e.target.value)}
+                        className="w-full bg-slate-50/50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-mono"
+                      />
+                    </div>
                   </div>
 
-                  {/* Seletor de Abas Localizadas */}
-                  {sheetsList.length > 0 && (
-                    <div className="bg-white rounded-xl border border-emerald-150 p-5 space-y-4 shadow-xs animate-fade-in">
-                      <div>
-                        <span className="text-xs font-bold text-slate-850 block flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          Planilha Verificada! Selecione a Aba
-                        </span>
-                        <span className="text-[10px] text-slate-500">Escolha a folha/página da planilha que contém a tabela de clientes</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-750 block">Aba / Intervalo (Opcional)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Compradores!A1:Z500"
+                        value={backendRange}
+                        onChange={(e) => setBackendRange(e.target.value)}
+                        className="w-full bg-slate-50/50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-mono"
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <button
+                        onClick={() => {
+                          if (!backendSpreadsheetId.trim() && !backendConfig?.hasSpreadsheetId) {
+                            alert("Por favor, preencha o ID da planilha do Google.");
+                            return;
+                          }
+                          handleSyncBackendSheets(backendSpreadsheetId, backendApiKey, backendRange);
+                        }}
+                        disabled={isSyncingBackend}
+                        className="w-full bg-slate-900 hover:bg-slate-850 disabled:opacity-55 text-white font-bold py-2 px-4 rounded-lg text-xxs flex items-center justify-center gap-1.5 transition-colors cursor-pointer select-none"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        Gravar Configuração & Sincronizar via Servidor
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* SEÇÃO 2: MAPEAMENTO ALTERNATIVO AD-HOC (VIA CONTA DO OPERADOR NO GOOGLE) */}
+              <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4 shadow-xs">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800">Canal Alternativo: Autenticar Operador em Tempo Real</h4>
+                    <p className="text-[10px] text-slate-500">Faça login com sua conta Google para ler diretamente do navegador (não salva credenciais no servidor).</p>
+                  </div>
+                </div>
+
+                {!googleUser ? (
+                  <div className="flex justify-center py-2 animate-fade-in">
+                    <button
+                      onClick={handleGoogleLogin}
+                      disabled={loadingGoogle}
+                      className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold border border-gray-250 rounded-lg px-4 py-2 shadow-xs transition-all text-xxs cursor-pointer disabled:opacity-55"
+                    >
+                      {loadingGoogle ? (
+                        <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
+                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                          </svg>
+                          <span>Sinalizar com Conta Google</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 animate-fade-in">
+                    <div className="bg-emerald-50/40 rounded-lg p-3 flex justify-between items-center gap-3 text-xxs border border-emerald-100">
+                      <div className="flex items-center gap-2">
+                        {googleUser.photoURL ? (
+                          <img referrerPolicy="no-referrer" src={googleUser.photoURL} alt="Avatar" className="w-6 h-6 rounded-full border border-emerald-200" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-emerald-600/10 text-emerald-800 font-bold flex items-center justify-center uppercase">
+                            {googleUser.displayName?.charAt(0) || 'G'}
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-bold text-slate-800 block">Autenticado como {googleUser.displayName || 'Google User'}</span>
+                          <span className="text-[9px] text-slate-500 block">{googleUser.email}</span>
+                        </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
-                        <select
-                          value={selectedSheetTab}
-                          onChange={(e) => setSelectedSheetTab(e.target.value)}
-                          className="bg-slate-50 border border-emerald-200 text-slate-800 rounded-lg p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                          {sheetsList.map((tab, idx) => (
-                            <option key={idx} value={tab}>{tab}</option>
-                          ))}
-                        </select>
+                      <button
+                        onClick={handleGoogleLogout}
+                        className="text-red-650 hover:bg-red-50 p-1 rounded-lg border border-red-100 flex items-center gap-1 font-bold text-xxs transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-3 h-3" /> Sair
+                      </button>
+                    </div>
 
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Cole link ou ID para conexão browser-level"
+                          value={sheetUrlOrId}
+                          onChange={(e) => setSheetUrlOrId(e.target.value)}
+                          className="flex-1 bg-slate-50 border border-gray-250 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-mono"
+                        />
                         <button
-                          onClick={handleFetchSpreadsheetRows}
-                          disabled={isFetchingRows || !selectedSheetTab}
-                          className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 transition-colors"
+                          onClick={handleVerifySpreadsheet}
+                          disabled={isLoadingSheets || !sheetUrlOrId.trim()}
+                          className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-4 py-1.5 rounded-lg text-xxs flex items-center gap-1 cursor-pointer select-none transition-colors"
                         >
-                          {isFetchingRows ? (
-                            <>
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                              Lendo Planilha...
-                            </>
-                          ) : (
-                            <>
-                              <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-                              Carregar Compradores
-                            </>
-                          )}
+                          {isLoadingSheets ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                          Verificar
                         </button>
                       </div>
-                    </div>
-                  )}
 
-                </div>
-              )}
+                      {sheetsList.length > 0 && (
+                        <div className="bg-slate-50 rounded-lg p-3 space-y-3 border border-emerald-100 animate-fade-in">
+                          <label className="text-[10px] font-bold text-slate-700 block">Sintonizar aba do documento:</label>
+                          <div className="flex gap-2">
+                            <select
+                              value={selectedSheetTab}
+                              onChange={(e) => setSelectedSheetTab(e.target.value)}
+                              className="flex-1 bg-white border border-emerald-100 text-slate-800 rounded-lg px-2.5 py-1.5 text-xxs font-semibold focus:outline-none"
+                            >
+                              {sheetsList.map((tab, idx) => (
+                                <option key={idx} value={tab}>{tab}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={handleFetchSpreadsheetRows}
+                              disabled={isFetchingRows || !selectedSheetTab}
+                              className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-1.5 px-4 rounded-lg text-xxs flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                            >
+                              {isFetchingRows ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />}
+                              Carregar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
             </div>
           )}
