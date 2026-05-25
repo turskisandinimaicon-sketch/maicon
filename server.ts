@@ -359,6 +359,24 @@ interface GoogleSheetsSyncResult {
   error?: string;
 }
 
+function isPlaceholderCredential(val?: string): boolean {
+  if (!val) return true;
+  const v = val.trim().toUpperCase();
+  return (
+    v === "" || 
+    v === "UNDEFINED" || 
+    v === "NULL" || 
+    v.startsWith("MY_") || 
+    v.startsWith("YOUR_") || 
+    v.includes("PLACEHOLDER") || 
+    v === "SPREADSHEET_ID" || 
+    v === "GOOGLE_API_KEY" || 
+    v === "CHAVE_BACKOFF" ||
+    v === "GOOGLE_SPREADSHEET_ID" ||
+    v === "GOOGLE_SHEETS_API_KEY"
+  );
+}
+
 async function syncFromGoogleSheets(
   customSpreadsheetId?: string,
   customApiKey?: string,
@@ -379,11 +397,11 @@ async function syncFromGoogleSheets(
                 (eventConfig as any).googleSheetsRange || 
                 "A1:Z1000";
 
-  if (!spreadsheetId) {
-    return { success: false, error: "Nenhum ID da planilha configurado no servidor ou recebido do painel." };
+  if (isPlaceholderCredential(spreadsheetId)) {
+    return { success: false, error: "Nenhum ID da planilha válido configurado no servidor ou recebido do painel." };
   }
-  if (!apiKey) {
-    return { success: false, error: "Nenhuma Chave API (chave backoff) do Google configurada no servidor." };
+  if (isPlaceholderCredential(apiKey)) {
+    return { success: false, error: "Nenhuma Chave API válida configurada no servidor." };
   }
 
   // Linear / Exponential Backoff retry utility
@@ -399,7 +417,14 @@ async function syncFromGoogleSheets(
       }
       if (!resp.ok) {
         const errText = await resp.text();
-        throw new Error(`Google API erro ${resp.status}: ${errText}`);
+        let errMsg = errText;
+        try {
+          const parsed = JSON.parse(errText);
+          if (parsed.error && parsed.error.message) {
+            errMsg = parsed.error.message;
+          }
+        } catch (_) {}
+        throw new Error(`Google API erro ${resp.status}: ${errMsg || errText}`);
       }
       return await resp.json();
     } catch (e: any) {
@@ -649,8 +674,11 @@ async function lazyInitialize() {
   loadLocalBackup();
   await initFirebase();
   
-  // Tenta sincronizar do Google Sheets se as chaves estiverem configuradas no ambiente
-  const hasSheetKeys = process.env.GOOGLE_SPREADSHEET_ID && (process.env.GOOGLE_SHEETS_API_KEY || process.env.GOOGLE_API_KEY || process.env.CHAVE_BACKOFF);
+  // Tenta sincronizar do Google Sheets se as chaves estiverem configuradas no ambiente e não forem fictícias
+  const hasSheetKeys = process.env.GOOGLE_SPREADSHEET_ID && 
+                       !isPlaceholderCredential(process.env.GOOGLE_SPREADSHEET_ID) && 
+                       (process.env.GOOGLE_SHEETS_API_KEY || process.env.GOOGLE_API_KEY || process.env.CHAVE_BACKOFF) &&
+                       !isPlaceholderCredential(process.env.GOOGLE_SHEETS_API_KEY || process.env.GOOGLE_API_KEY || process.env.CHAVE_BACKOFF);
   if (hasSheetKeys) {
     console.log("[INIT] Credenciais do Google Sheets encontradas no servidor. Iniciando sincronização em tempo real.");
     try {
