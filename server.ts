@@ -47,6 +47,10 @@ async function initFirebase() {
   }
 }
 
+let firstSyncCompleted = false;
+let lastSyncTime = 0;
+const SYNC_THROTTLE_MS = 2000; // Synchronize at most once every 2 seconds
+
 // Function to pull all data from Firestore, or push defaults if collections are empty
 async function syncFromFirestore() {
   if (!useFirebase || !db) return;
@@ -59,7 +63,7 @@ async function syncFromFirestore() {
     const configSnapshot = await getDoc(configDocRef);
     if (configSnapshot.exists()) {
       eventConfig = configSnapshot.data() as EventConfig;
-    } else {
+    } else if (!firstSyncCompleted) {
       await setDoc(configDocRef, eventConfig);
     }
 
@@ -68,10 +72,12 @@ async function syncFromFirestore() {
     const enterprisesSnapshot = await getDocs(enterprisesColl);
     if (!enterprisesSnapshot.empty) {
       enterprises = enterprisesSnapshot.docs.map(doc => doc.data() as Enterprise);
-    } else {
+    } else if (!firstSyncCompleted) {
       for (const ent of enterprises) {
         await setDoc(doc(db, "enterprises", ent.id), ent);
       }
+    } else {
+      enterprises = [];
     }
 
     // 3. Sync Users
@@ -79,10 +85,12 @@ async function syncFromFirestore() {
     const usersSnapshot = await getDocs(usersColl);
     if (!usersSnapshot.empty) {
       users = usersSnapshot.docs.map(doc => doc.data() as User);
-    } else {
+    } else if (!firstSyncCompleted) {
       for (const user of users) {
         await setDoc(doc(db, "users", user.id), user);
       }
+    } else {
+      users = [];
     }
 
     // 4. Sync Clients
@@ -90,10 +98,12 @@ async function syncFromFirestore() {
     const clientsSnapshot = await getDocs(clientsColl);
     if (!clientsSnapshot.empty) {
       clients = clientsSnapshot.docs.map(doc => doc.data() as Client);
-    } else {
+    } else if (!firstSyncCompleted) {
       for (const cl of clients) {
         await setDoc(doc(db, "clients", cl.id), cl);
       }
+    } else {
+      clients = [];
     }
 
     // 5. Sync activeCalls
@@ -101,10 +111,12 @@ async function syncFromFirestore() {
     const callsSnapshot = await getDocs(callsColl);
     if (!callsSnapshot.empty) {
       activeCalls = callsSnapshot.docs.map(doc => doc.data() as CallLog);
-    } else {
+    } else if (!firstSyncCompleted) {
       for (const call of activeCalls) {
         await setDoc(doc(db, "activeCalls", call.id), call);
       }
+    } else {
+      activeCalls = [];
     }
 
     // 6. Sync whatsappMessages
@@ -112,6 +124,8 @@ async function syncFromFirestore() {
     const msgsSnapshot = await getDocs(msgsColl);
     if (!msgsSnapshot.empty) {
       whatsappMessages = msgsSnapshot.docs.map(doc => doc.data() as WhatsappMessage);
+    } else {
+      whatsappMessages = [];
     }
 
     // 7. Sync auditLogs
@@ -119,11 +133,29 @@ async function syncFromFirestore() {
     const auditSnapshot = await getDocs(auditColl);
     if (!auditSnapshot.empty) {
       auditLogs = auditSnapshot.docs.map(doc => doc.data() as AuditLog);
+    } else {
+      auditLogs = [];
     }
 
+    firstSyncCompleted = true;
     console.log("[FIREBASE] Sincronização concluída com sucesso.");
+    saveLocalBackup();
   } catch (err) {
     console.error("[FIREBASE] Erro ao sincronizar com o Firestore:", err);
+  }
+}
+
+// Throttled synchronization helper called at request-level
+async function ensureSynced() {
+  if (!useFirebase || !db) return;
+  const now = Date.now();
+  if (now - lastSyncTime > SYNC_THROTTLE_MS) {
+    try {
+      await syncFromFirestore();
+      lastSyncTime = Date.now();
+    } catch (e) {
+      console.warn("[FIREBASE] Throttled sync error in ensureSynced:", e);
+    }
   }
 }
 
@@ -192,6 +224,16 @@ async function saveClient(c: Client) {
     }
   }
   saveLocalBackup();
+}
+
+async function saveClientFirebaseOnly(c: Client) {
+  if (useFirebase && db) {
+    try {
+      await setDoc(doc(db, "clients", c.id), c);
+    } catch (err) {
+      console.error("Erro saving client firebase only: ", err);
+    }
+  }
 }
 
 async function saveCall(call: CallLog) {
@@ -341,12 +383,14 @@ function sendAutoWhatsapp(client: Client) {
 // --- APIS ---
 
 // Obter configurações do evento ativo
-app.get("/api/event-config", (req, res) => {
+app.get("/api/event-config", async (req, res) => {
+  await ensureSynced();
   res.json(eventConfig);
 });
 
 // Atualizar configurações do evento (Nome e Logo)
 app.post("/api/event-config", async (req, res) => {
+  await ensureSynced();
   const { enterpriseName, logoUrl, logoType, logoIconName, eventDate } = req.body;
   if (enterpriseName) eventConfig.enterpriseName = enterpriseName;
   if (logoUrl !== undefined) eventConfig.logoUrl = logoUrl;
@@ -360,13 +404,15 @@ app.post("/api/event-config", async (req, res) => {
 });
 
 // Obter todos os empreendimentos cadastrados
-app.get("/api/enterprises", (req, res) => {
+app.get("/api/enterprises", async (req, res) => {
+  await ensureSynced();
   res.json(enterprises);
 });
 
 // Cadastrar ou editar um empreendimento
 app.post("/api/enterprises", async (req, res) => {
   try {
+    await ensureSynced();
     const { id, name, logoType, logoUrl, logoIconName } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Nome do empreendimento é obrigatório." });
@@ -433,6 +479,7 @@ app.post("/api/enterprises", async (req, res) => {
 // Excluir um empreendimento
 app.delete("/api/enterprises/:id", async (req, res) => {
   try {
+    await ensureSynced();
     const { id } = req.params;
     const entIndex = enterprises.findIndex(e => e.id === id);
     if (entIndex === -1) {
@@ -458,7 +505,8 @@ app.delete("/api/enterprises/:id", async (req, res) => {
 });
 
 // Obter todos os clientes
-app.get("/api/clients", (req, res) => {
+app.get("/api/clients", async (req, res) => {
+  await ensureSynced();
   res.json(clients);
 });
 
@@ -539,12 +587,14 @@ app.post("/api/clients/reset", async (req, res) => {
 });
 
 // Obter usuários
-app.get("/api/users", (req, res) => {
+app.get("/api/users", async (req, res) => {
+  await ensureSynced();
   res.json(users);
 });
 
 // Cadastrar/Editar usuário
 app.post("/api/users", async (req, res) => {
+  await ensureSynced();
   const { id, name, role, username, deskNumber, status } = req.body;
   
   if (!username) {
@@ -590,6 +640,7 @@ app.post("/api/users", async (req, res) => {
 
 // Excluir usuário do sistema
 app.delete("/api/users/:id", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const userExist = users.find(u => u.id === id);
   if (userExist) {
@@ -607,6 +658,7 @@ app.delete("/api/users/:id", async (req, res) => {
 
 // Atualizar status de usuário/operador
 app.post("/api/users/:id/status", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const { status, deskNumber } = req.body;
   
@@ -615,7 +667,7 @@ app.post("/api/users/:id/status", async (req, res) => {
     if (status) userObj.status = status;
     if (deskNumber !== undefined) userObj.deskNumber = deskNumber;
     await saveUser(userObj);
-    logAction(userObj.name, userObj.role, "Alterou Status/Recurso", `Operador atualizou: status=${status || userObj.status}, guichê=${deskNumber || userObj.deskNumber}`);
+    logAction(userObj.name, userObj.role, "Alterou Status/Recurso", `Operador updated: status=${status || userObj.status}, guichê=${deskNumber || userObj.deskNumber}`);
     res.json({ success: true, user: userObj });
   } else {
     res.status(404).json({ error: "Usuário não encontrado" });
@@ -630,74 +682,67 @@ app.post("/api/clients/import", async (req, res) => {
       return res.status(400).json({ error: "Dados inválidos para importação." });
     }
 
-    // BASE ZERADA ANTES DA IMPORTACAO
+    // BASE ZERADA ANTES DA IMPORTACAO NO FIREBASE Concorrente
     if (useFirebase && db) {
       try {
         const clientsColl = collection(db, "clients");
         const clientsSnapshot = await getDocs(clientsColl);
-        for (const docSnap of clientsSnapshot.docs) {
-          await deleteDoc(doc(db, "clients", docSnap.id));
-        }
+        const deletePromises = clientsSnapshot.docs.map(docSnap => deleteDoc(doc(db, "clients", docSnap.id)));
+        await Promise.all(deletePromises);
       } catch (fErr) {
         console.warn("Erro ao limpar Firebase antes de importar:", fErr);
       }
     }
-    clients = []; // Limpa cache em memória também
 
+    const tempClients: Client[] = [];
     let importedCount = 0;
-    let updatedCount = 0;
 
     for (const row of fileData) {
       if (!row || !row.nome || !row.cpf) continue;
       
-      // Procura CPF existente de forma robusta
       const rawCpfClean = String(row.cpf).replace(/\D/g, '');
       if (!rawCpfClean) continue;
 
-      const clientExist = clients.find(c => {
-        if (!c.cpf) return false;
-        return String(c.cpf).replace(/\D/g, '') === rawCpfClean;
-      });
+      // Criar novo registro
+      const newClient: Client = {
+        id: "c-" + generateId(),
+        nome: row.nome.trim(),
+        cpf: row.cpf,
+        empreendimento: row.empreendimento || "Residencial Canto das Flores",
+        bloco: row.bloco || "Bloco A",
+        unidade: row.unidade || "Unidade Geral",
+        telefone: row.telefone || "(11) 99999-9999",
+        email: row.email || "contato@cliente.com",
+        statusContratual: row.statusContratual || "QUITADO",
+        status: "AGUARDANDO_RECEPCAO",
+        priority: row.priority || "NORMAL",
+        possuiProcurador: false,
+        possuiVistoriadorProprio: false,
+        liberadoParaVistoria: false,
+        documentos: []
+      };
 
-      if (clientExist) {
-        // Atualizar dados cadastrais mantendo o status operacional de fila
-        clientExist.nome = row.nome;
-        clientExist.empreendimento = row.empreendimento || clientExist.empreendimento;
-        clientExist.bloco = row.bloco || clientExist.bloco;
-        clientExist.unidade = row.unidade || clientExist.unidade;
-        clientExist.telefone = row.telefone || clientExist.telefone;
-        clientExist.email = row.email || clientExist.email;
-        clientExist.statusContratual = row.statusContratual || clientExist.statusContratual;
-        if (row.observacoes) clientExist.observacoes = row.observacoes;
-        await saveClient(clientExist);
-        updatedCount++;
-      } else {
-        // Criar novo registro
-        const newClient: Client = {
-          id: "c-" + generateId(),
-          nome: row.nome,
-          cpf: row.cpf,
-          empreendimento: row.empreendimento || "Residencial Canto das Flores",
-          bloco: row.bloco || "Bloco A",
-          unidade: row.unidade || "Unidade Geral",
-          telefone: row.telefone || "(11) 99999-9999",
-          email: row.email || "contato@cliente.com",
-          statusContratual: row.statusContratual || "QUITADO",
-          status: "AGUARDANDO_RECEPCAO",
-          priority: row.priority || "NORMAL",
-          possuiProcurador: false,
-          possuiVistoriadorProprio: false,
-          liberadoParaVistoria: false,
-          documentos: []
-        };
-        clients.push(newClient);
-        await saveClient(newClient);
-        importedCount++;
+      if (row.observacoes) {
+        newClient.observacoes = row.observacoes;
       }
+      
+      tempClients.push(newClient);
+      importedCount++;
     }
 
-    logAction("Administrador", "ADMIN", "Importação Realizada", `Importados ${importedCount} novos registros, atualizados ${updatedCount} existentes`);
-    res.json({ success: true, importedCount, updatedCount, clients });
+    // Salvar concorrentemente no Firebase sem travar o backup local
+    if (useFirebase && db) {
+      const savePromises = tempClients.map(c => saveClientFirebaseOnly(c));
+      await Promise.all(savePromises);
+    }
+
+    // Atualiza estado local de forma atômica
+    clients = tempClients;
+    saveLocalBackup();
+    lastSyncTime = Date.now();
+
+    logAction("Administrador", "ADMIN", "Importação Realizada", `Importados ${importedCount} novos registros com base zerada.`);
+    res.json({ success: true, importedCount, updatedCount: 0, clients });
   } catch (err: any) {
     console.error("Erro em POST /api/clients/import:", err);
     res.status(500).json({ error: "Erro interno no processamento de importação: " + (err.message || String(err)) });
@@ -706,6 +751,7 @@ app.post("/api/clients/import", async (req, res) => {
 
 // Recepção: Marcar presença e inserir na fila de atendimento
 app.post("/api/clients/:id/check-in", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const { possuiProcurador, priority, observacoes } = req.body;
   const clientObj = clients.find(c => c.id === id);
@@ -733,6 +779,7 @@ app.post("/api/clients/:id/check-in", async (req, res) => {
 
 // Recepção/Admin: Remover cliente da fila (colocado por engano)
 app.post("/api/clients/:id/remove-from-queue", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const clientObj = clients.find(c => c.id === id);
 
@@ -779,7 +826,8 @@ app.post("/api/clients/:id/remove-from-queue", async (req, res) => {
 });
 
 // Roleta: Atendente ou Vistoriador Puxa Próximo da Fila
-app.post("/api/operators/call-next", (req, res) => {
+app.post("/api/operators/call-next", async (req, res) => {
+  await ensureSynced();
   const { operatorId, type } = req.body; // type: 'ATENDIMENTO' ou 'VISTORIA'
   const operator = users.find(u => u.id === operatorId);
 
@@ -821,7 +869,7 @@ app.post("/api/operators/call-next", (req, res) => {
     operator.status = "EM_ATENDIMENTO";
 
     // Adicionar chamada ativa no Painel de TV
-    activeCalls.unshift({
+    const newCall: CallLog = {
       id: "call-" + generateId(),
       clienteNome: nextClient.nome,
       unidade: `${nextClient.bloco} - ${nextClient.unidade}`,
@@ -829,7 +877,12 @@ app.post("/api/operators/call-next", (req, res) => {
       responsavelNome: operator.name,
       timestamp: timeStr,
       status: "CHAMANDO"
-    });
+    };
+    activeCalls.unshift(newCall);
+
+    await saveClient(nextClient);
+    await saveUser(operator);
+    await saveCall(newCall);
 
     logAction(operator.name, "ATENDENTE", "Chamou Próximo", `Chamou cliente ${nextClient.nome} para ${operator.deskNumber}`);
     return res.json({ success: true, client: nextClient, activeCalls });
@@ -861,7 +914,7 @@ app.post("/api/operators/call-next", (req, res) => {
 
     operator.status = "EM_VISTORIA";
 
-    activeCalls.unshift({
+    const newCall: CallLog = {
       id: "call-" + generateId(),
       clienteNome: nextClient.nome,
       unidade: `${nextClient.bloco} - ${nextClient.unidade}`,
@@ -869,7 +922,12 @@ app.post("/api/operators/call-next", (req, res) => {
       responsavelNome: operator.name,
       timestamp: timeStr,
       status: "CHAMANDO"
-    });
+    };
+    activeCalls.unshift(newCall);
+
+    await saveClient(nextClient);
+    await saveUser(operator);
+    await saveCall(newCall);
 
     logAction(operator.name, "VISTORIADOR", "Chamou Próximo", `Iniciou rota de vistoria com ${nextClient.nome} na unidade ${nextClient.unidade}`);
     return res.json({ success: true, client: nextClient, activeCalls });
@@ -879,7 +937,8 @@ app.post("/api/operators/call-next", (req, res) => {
 });
 
 // Atendente salva detalhes do cliente, documentos adicionais e finaliza atendimento
-app.post("/api/clients/:id/save-details", (req, res) => {
+app.post("/api/clients/:id/save-details", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const { 
     telefone, whatsapp, email,
@@ -904,12 +963,14 @@ app.post("/api/clients/:id/save-details", (req, res) => {
   client.vistoriadorParticularCrea = vistoriadorParticularCrea;
   if (observacoes !== undefined) client.observacoes = observacoes;
 
+  await saveClient(client);
   logAction(client.atendenteNome || "Atendente", "ATENDENTE", "Ficha Atualizada", `Cadastro de ${client.nome} revisado e salvo`);
   res.json({ success: true, client });
 });
 
 // Upload de Documentos para Cliente
-app.post("/api/clients/:id/upload-doc", (req, res) => {
+app.post("/api/clients/:id/upload-doc", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const { docName, category, base64Content } = req.body;
 
@@ -941,11 +1002,13 @@ app.post("/api/clients/:id/upload-doc", (req, res) => {
     logAction(client.atendenteNome || "Atendente", "ATENDENTE", "Upload Anexo", `Salvo documento ${category} para ${client.nome}`);
   }
 
+  await saveClient(client);
   res.json({ success: true, client, doc: newDoc });
 });
 
 // Atendente libera cliente (se possui vistoriador próprio ou normal) para Vistoria
-app.post("/api/clients/:id/release-to-inspection", (req, res) => {
+app.post("/api/clients/:id/release-to-inspection", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const client = clients.find(c => c.id === id);
 
@@ -981,14 +1044,17 @@ app.post("/api/clients/:id/release-to-inspection", (req, res) => {
     if (atendente) {
       atendente.status = "DISPONIVEL";
       atendente.completedCount++;
+      await saveUser(atendente);
     }
   }
 
+  await saveClient(client);
   res.json({ success: true, client, users });
 });
 
 // Vistoriador finaliza vistoria com sucesso (Triggers automatic WhatsApp)
-app.post("/api/clients/:id/finish-inspection", (req, res) => {
+app.post("/api/clients/:id/finish-inspection", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const { clientSatisfaction, satisfactionComment } = req.body;
   const client = clients.find(c => c.id === id);
@@ -1015,8 +1081,11 @@ app.post("/api/clients/:id/finish-inspection", (req, res) => {
     if (vist) {
       vist.status = "DISPONIVEL";
       vist.completedCount++;
+      await saveUser(vist);
     }
   }
+
+  await saveClient(client);
 
   logAction(client.vistoriadorNome || "Vistoriador", "VISTORIADOR", "Vistoria Concluída", `Laudo finalizado para ${client.nome}. Chaves entregues.`);
   
@@ -1027,7 +1096,8 @@ app.post("/api/clients/:id/finish-inspection", (req, res) => {
 });
 
 // Admin aprova laudo reenviado pós-WhatsApp e finaliza de fato
-app.post("/api/clients/:id/validate-laudo", (req, res) => {
+app.post("/api/clients/:id/validate-laudo", async (req, res) => {
+  await ensureSynced();
   const { id } = req.params;
   const client = clients.find(c => c.id === id);
   if (!client) {
@@ -1035,27 +1105,32 @@ app.post("/api/clients/:id/validate-laudo", (req, res) => {
   }
 
   client.status = "PROCESSO_ENCERRADO";
+  await saveClient(client);
   logAction("Administrador", "ADMIN", "Laudo Validado", `Laudo particular validado para ${client.nome}. Processo integralmente finalizado.`);
   res.json({ success: true, client });
 });
 
 // Obter as mensagens do Whatsapp simulado
-app.get("/api/messages", (req, res) => {
+app.get("/api/messages", async (req, res) => {
+  await ensureSynced();
   res.json(whatsappMessages);
 });
 
 // Obter logs de auditoria
-app.get("/api/logs", (req, res) => {
+app.get("/api/logs", async (req, res) => {
+  await ensureSynced();
   res.json(auditLogs);
 });
 
 // Obter as chamadas ativas do painel
-app.get("/api/tv-calls", (req, res) => {
+app.get("/api/tv-calls", async (req, res) => {
+  await ensureSynced();
   res.json(activeCalls);
 });
 
 // Criar alertas operacionais de forma dinâmica (baseado no estado da fila real)
-app.get("/api/operational-alerts", (req, res) => {
+app.get("/api/operational-alerts", async (req, res) => {
+  await ensureSynced();
   const alerts: OperationalAlert[] = [];
   
   // 1. Fila de atendimento grande
