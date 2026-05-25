@@ -754,118 +754,7 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
                 )}
               </div>
 
-              {/* Mapeamento de Colunas (Aparece somente quando houver arquivo selecionado) */}
-              {fileHeaders.length > 0 && (
-                <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-xs animate-fade-in">
-                  
-                  <div className="flex justify-between items-center border-b border-gray-100 pb-2.5">
-                    <div>
-                      <h3 className="font-bold text-slate-805 text-sm flex items-center gap-1.5">
-                        <Info className="w-4 h-4 text-indigo-650" />
-                        Mapeamento de Colunas Inteligente
-                      </h3>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Identificamos as colunas da sua planilha. Ajuste as conexões se for necessário.</p>
-                    </div>
-                    
-                    <button
-                      onClick={() => {
-                        setUploadedFileName('');
-                        setFileHeaders([]);
-                        setFileDataRows([]);
-                        setColumnMapping({});
-                        setPreviewRows([]);
-                        setWarnings([]);
-                      }}
-                      className="text-red-650 hover:bg-red-50 p-1.5 rounded-lg border border-red-200/50 hover:text-red-750 text-xxs block font-bold transition-colors cursor-pointer"
-                    >
-                      Remover Planilha
-                    </button>
-                  </div>
 
-                  {/* Lista de mapeamentos */}
-                  <div className="divide-y divide-gray-100 max-h-[350px] overflow-y-auto pr-1">
-                    {systemColumns.map(systemCol => {
-                      const selectedIdx = columnMapping[systemCol.key];
-                      const isMapped = selectedIdx !== undefined && selectedIdx !== -1;
-
-                      return (
-                        <div key={systemCol.key} className="py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                          {/* Info do Sistema */}
-                          <div className="max-w-xs space-y-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-800">{systemCol.label}</span>
-                              {systemCol.required ? (
-                                <span className="text-[9px] font-extrabold text-red-500 bg-red-50 border border-red-100 px-1 py-0.1 rounded uppercase">Obrigatório</span>
-                              ) : (
-                                <span className="text-[9px] text-gray-400 bg-slate-100 px-1 py-0.1 rounded uppercase">Opcional</span>
-                              )}
-                            </div>
-                            <p className="text-[10px] text-gray-500 leading-normal">{systemCol.description}</p>
-                          </div>
-
-                          {/* Seletor da Planilha */}
-                          <div className="flex items-center gap-2 md:w-64">
-                            <select
-                              value={selectedIdx !== undefined ? selectedIdx : -1}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                setColumnMapping(prev => ({
-                                  ...prev,
-                                  [systemCol.key]: val
-                                }));
-                              }}
-                              className={`w-full text-xxs font-mono p-1.5 rounded-lg border ${
-                                isMapped 
-                                  ? 'border-indigo-200 bg-indigo-50/20 text-indigo-900 font-bold' 
-                                  : systemCol.required 
-                                    ? 'border-red-200 bg-red-50 text-red-900 font-bold' 
-                                    : 'border-gray-250 bg-slate-50 text-gray-500'
-                              }`}
-                            >
-                              <option value={-1}>-- Sem Correspondência --</option>
-                              {fileHeaders.map(h => (
-                                <option key={h.index} value={h.index}>
-                                  Coluna: "{h.label}"
-                                </option>
-                              ))}
-                            </select>
-
-                            {/* Indicador Check ou pendência */}
-                            <div className="w-5 h-5 shrink-0 flex items-center justify-center">
-                              {isMapped ? (
-                                <Check className="w-4 h-4 text-emerald-600" />
-                              ) : (
-                                systemCol.required && <AlertCircle className="w-4 h-4 text-red-500 animate-pulse" />
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Preview da Linha */}
-                          <div className="text-[10px] md:w-48 text-right flex items-center justify-end">
-                            {isMapped && (
-                              <div className="bg-slate-100/60 px-2 py-0.5 rounded max-w-full text-left truncate">
-                                <span className="text-gray-400 text-[8px] block uppercase font-bold tracking-tight">Primeira linha:</span>
-                                {getSampleMappedData(systemCol.key)}
-                              </div>
-                            )}
-                          </div>
-
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Ação de Processar */}
-                  <button
-                    onClick={handleProcessMappedFile}
-                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
-                  >
-                    <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-                    Analisar dados de acordo com o Mapeamento
-                  </button>
-
-                </div>
-              )}
 
             </div>
           ) : activeTab === 'PASTE' ? (
@@ -1050,6 +939,119 @@ Bárbara Alencar Neves;555.666.777-88;Residencial Canto das Flores;Bloco A;Apto 
 
                 </div>
               )}
+
+            </div>
+          )}
+
+          {/* Mapeamento de Colunas (Aparece somente quando houver arquivo selecionado no FILE ou SHEETS) */}
+          {activeTab !== 'PASTE' && fileHeaders.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-xs animate-fade-in">
+              
+              <div className="flex justify-between items-center border-b border-gray-100 pb-2.5">
+                <div>
+                  <h3 className="font-bold text-slate-805 text-sm flex items-center gap-1.5">
+                    <Info className="w-4 h-4 text-indigo-650" />
+                    Mapeamento de Colunas Inteligente
+                  </h3>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Identificamos as colunas da sua planilha. Ajuste as conexões se for necessário.</p>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    setUploadedFileName('');
+                    setFileHeaders([]);
+                    setFileDataRows([]);
+                    setColumnMapping({});
+                    setPreviewRows([]);
+                    setWarnings([]);
+                  }}
+                  className="text-red-650 hover:bg-red-50 p-1.5 rounded-lg border border-red-200/50 hover:text-red-750 text-xxs block font-bold transition-colors cursor-pointer"
+                >
+                  Remover Planilha
+                </button>
+              </div>
+
+              {/* Lista de mapeamentos */}
+              <div className="divide-y divide-gray-100 max-h-[350px] overflow-y-auto pr-1">
+                {systemColumns.map(systemCol => {
+                  const selectedIdx = columnMapping[systemCol.key];
+                  const isMapped = selectedIdx !== undefined && selectedIdx !== -1;
+
+                  return (
+                    <div key={systemCol.key} className="py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                      {/* Info do Sistema */}
+                      <div className="max-w-xs space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-800">{systemCol.label}</span>
+                          {systemCol.required ? (
+                            <span className="text-[9px] font-extrabold text-red-500 bg-red-50 border border-red-100 px-1 py-0.1 rounded uppercase">Obrigatório</span>
+                          ) : (
+                            <span className="text-[9px] text-gray-400 bg-slate-100 px-1 py-0.1 rounded uppercase">Opcional</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 leading-normal">{systemCol.description}</p>
+                      </div>
+
+                      {/* Seletor da Planilha */}
+                      <div className="flex items-center gap-2 md:w-64">
+                        <select
+                          value={selectedIdx !== undefined ? selectedIdx : -1}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            setColumnMapping(prev => ({
+                              ...prev,
+                              [systemCol.key]: val
+                            }));
+                          }}
+                          className={`w-full text-xxs font-mono p-1.5 rounded-lg border ${
+                            isMapped 
+                              ? 'border-indigo-200 bg-indigo-50/20 text-indigo-900 font-bold' 
+                              : systemCol.required 
+                                ? 'border-red-200 bg-red-50 text-red-900 font-bold' 
+                                : 'border-gray-250 bg-slate-50 text-gray-500'
+                          }`}
+                        >
+                          <option value={-1}>-- Sem Correspondência --</option>
+                          {fileHeaders.map(h => (
+                            <option key={h.index} value={h.index}>
+                              Coluna: "{h.label}"
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Indicador Check ou pendência */}
+                        <div className="w-5 h-5 shrink-0 flex items-center justify-center">
+                          {isMapped ? (
+                            <Check className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            systemCol.required && <AlertCircle className="w-4 h-4 text-red-500 animate-pulse" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Preview da Linha */}
+                      <div className="text-[10px] md:w-48 text-right flex items-center justify-end">
+                        {isMapped && (
+                          <div className="bg-slate-100/60 px-2 py-0.5 rounded max-w-full text-left truncate">
+                            <span className="text-gray-400 text-[8px] block uppercase font-bold tracking-tight">Primeira linha:</span>
+                            {getSampleMappedData(systemCol.key)}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Ação de Processar */}
+              <button
+                onClick={handleProcessMappedFile}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
+              >
+                <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                Analisar dados de acordo com o Mapeamento
+              </button>
 
             </div>
           )}
