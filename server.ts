@@ -287,14 +287,14 @@ async function saveLog(log: AuditLog) {
 let clients: Client[] = [];
 
 let users: User[] = [
-  { id: "u-1", name: "Bruno Reis", role: "ADMIN", username: "bruno.admin", status: "ONLINE", completedCount: 22 },
-  { id: "u-2", name: "Renan Silva", role: "ATENDENTE", username: "renan.atend", deskNumber: "Guichê 01", status: "DISPONIVEL", completedCount: 8 },
-  { id: "u-3", name: "Juliana Souza", role: "ATENDENTE", username: "juliana.atend", deskNumber: "Guichê 02", status: "EM_ATENDIMENTO", completedCount: 11 },
-  { id: "u-4", name: "Marcos Castro", role: "ATENDENTE", username: "marcos.atend", deskNumber: "Guichê 03", status: "DISPONIVEL", completedCount: 9 },
-  { id: "u-5", name: "Aline Pereira", role: "VISTORIADOR", username: "aline.vist", deskNumber: "Área A", status: "DISPONIVEL", completedCount: 6 },
-  { id: "u-6", name: "Tiago Mendes", role: "VISTORIADOR", username: "tiago.vist", deskNumber: "Área B", status: "EM_VISTORIA", completedCount: 5 },
-  { id: "u-7", name: "Patricia Vieira", role: "VISTORIADOR", username: "patricia.vist", deskNumber: "Área C", status: "INDISPONIVEL", completedCount: 4 },
-  { id: "u-8", name: "Fernanda Lima", role: "RECEPCIONISTA", username: "fernanda.recep", status: "ONLINE", completedCount: 19 },
+  { id: "u-1", name: "Bruno Reis", role: "ADMIN", username: "bruno.admin", status: "ONLINE", completedCount: 22, password: "bruno.admin" },
+  { id: "u-2", name: "Renan Silva", role: "ATENDENTE", username: "renan.atend", deskNumber: "Guichê 01", status: "DISPONIVEL", completedCount: 8, password: "renan.atend" },
+  { id: "u-3", name: "Juliana Souza", role: "ATENDENTE", username: "juliana.atend", deskNumber: "Guichê 02", status: "EM_ATENDIMENTO", completedCount: 11, password: "juliana.atend" },
+  { id: "u-4", name: "Marcos Castro", role: "ATENDENTE", username: "marcos.atend", deskNumber: "Guichê 03", status: "DISPONIVEL", completedCount: 9, password: "marcos.atend" },
+  { id: "u-5", name: "Aline Pereira", role: "VISTORIADOR", username: "aline.vist", deskNumber: "Área A", status: "DISPONIVEL", completedCount: 6, password: "aline.vist" },
+  { id: "u-6", name: "Tiago Mendes", role: "VISTORIADOR", username: "tiago.vist", deskNumber: "Área B", status: "EM_VISTORIA", completedCount: 5, password: "tiago.vist" },
+  { id: "u-7", name: "Patricia Vieira", role: "VISTORIADOR", username: "patricia.vist", deskNumber: "Área C", status: "INDISPONIVEL", completedCount: 4, password: "patricia.vist" },
+  { id: "u-8", name: "Fernanda Lima", role: "RECEPCIONISTA", username: "fernanda.recep", status: "ONLINE", completedCount: 19, password: "fernanda.recep" },
 ];
 
 let auditLogs: AuditLog[] = [];
@@ -765,7 +765,7 @@ app.get("/api/enterprises", async (req, res) => {
 app.post("/api/enterprises", async (req, res) => {
   try {
     await ensureSynced();
-    const { id, name, logoType, logoUrl, logoIconName } = req.body;
+    const { id, name, logoType, logoUrl, logoIconName, status, observacoes } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Nome do empreendimento é obrigatório." });
     }
@@ -783,6 +783,8 @@ app.post("/api/enterprises", async (req, res) => {
       enterprise.logoType = logoType || enterprise.logoType || 'ICON';
       enterprise.logoUrl = logoUrl !== undefined ? logoUrl : enterprise.logoUrl;
       enterprise.logoIconName = logoIconName || enterprise.logoIconName || 'Building2';
+      enterprise.status = status || enterprise.status || 'ATIVO';
+      enterprise.observacoes = observacoes !== undefined ? observacoes : enterprise.observacoes;
       await saveEnterprise(enterprise);
 
       // Renomear em cascata nos compradores ativos
@@ -815,7 +817,9 @@ app.post("/api/enterprises", async (req, res) => {
         name: normalizedName,
         logoType: logoType || 'ICON',
         logoUrl: logoUrl || '',
-        logoIconName: logoIconName || 'Building2'
+        logoIconName: logoIconName || 'Building2',
+        status: status || 'ATIVO',
+        observacoes: observacoes || ''
       };
       enterprises.push(newEnt);
       await saveEnterprise(newEnt);
@@ -994,10 +998,43 @@ app.get("/api/users", async (req, res) => {
   res.json(users);
 });
 
+// Autenticação de Usuário (Sessão Segura)
+app.post("/api/login", async (req, res) => {
+  await ensureSynced();
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ error: "Nome de usuário e senha são obrigatórios." });
+  }
+
+  const normalizedUsername = username.trim().toLowerCase();
+  const user = users.find(u => u.username.toLowerCase() === normalizedUsername);
+
+  if (!user) {
+    return res.status(401).json({ error: "Usuário não encontrado." });
+  }
+
+  if (user.disabled) {
+    return res.status(403).json({ error: "Este operador está inativo no sistema." });
+  }
+
+  const expectedPassword = user.password || user.username;
+  if (password !== expectedPassword) {
+    return res.status(401).json({ error: "Senha incorreta." });
+  }
+
+  // Atualizar status para ONLINE ao logar
+  user.status = "ONLINE";
+  await saveUser(user);
+
+  logAction(user.name, user.role, "Login Efetuado", `Operador @${user.username} iniciou sessão de forma segura.`);
+  res.json({ success: true, user });
+});
+
 // Cadastrar/Editar usuário
 app.post("/api/users", async (req, res) => {
   await ensureSynced();
-  const { id, name, role, username, deskNumber, status } = req.body;
+  const { id, name, role, username, deskNumber, status, password, disabled } = req.body;
   
   if (!username) {
     return res.status(400).json({ error: "ERRO: O campo de nome de usuário é obrigatório." });
@@ -1015,7 +1052,18 @@ app.post("/api/users", async (req, res) => {
     // Editar
     users = users.map(u => {
       if (u.id === id) {
-        const updated = { ...u, name, role, username: normalizedUsername, deskNumber, status: status || u.status };
+        const updated = { 
+          ...u, 
+          name, 
+          role, 
+          username: normalizedUsername, 
+          deskNumber, 
+          status: status || u.status,
+          disabled: disabled !== undefined ? disabled : u.disabled
+        };
+        if (password && password.trim() !== "") {
+          updated.password = password.trim();
+        }
         saveUser(updated);
         return updated;
       }
@@ -1031,7 +1079,9 @@ app.post("/api/users", async (req, res) => {
       username: normalizedUsername,
       deskNumber,
       status: status || "DISPONIVEL",
-      completedCount: 0
+      completedCount: 0,
+      password: (password && password.trim() !== "") ? password.trim() : normalizedUsername,
+      disabled: disabled || false
     };
     users.push(newUser);
     await saveUser(newUser);

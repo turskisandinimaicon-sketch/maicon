@@ -25,7 +25,9 @@ interface DashboardViewProps {
     name: string,
     logoType?: 'ICON' | 'URL',
     logoUrl?: string,
-    logoIconName?: string
+    logoIconName?: string,
+    status?: 'ATIVO' | 'INATIVO',
+    observacoes?: string
   ) => Promise<{ success: boolean; error?: string }>;
   onDeleteEnterprise?: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -48,6 +50,7 @@ export default function DashboardView({
 }: DashboardViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [entSearchQuery, setEntSearchQuery] = useState('');
 
   // CALCULO DINAMICO DAS METRICAS DA FILA REAL-TIME
   const parseTimeToMinutesLocal = (timeStr?: string): number | null => {
@@ -112,6 +115,12 @@ export default function DashboardView({
   const [editingEnterpriseId, setEditingEnterpriseId] = useState<string | null>(null);
   const [editingEnterpriseName, setEditingEnterpriseName] = useState('');
   const [newEnterpriseName, setNewEnterpriseName] = useState('');
+  const [newEnterpriseStatus, setNewEnterpriseStatus] = useState<'ATIVO' | 'INATIVO'>('ATIVO');
+  const [newEnterpriseObs, setNewEnterpriseObs] = useState('');
+
+  const [editingEnterpriseStatus, setEditingEnterpriseStatus] = useState<'ATIVO' | 'INATIVO'>('ATIVO');
+  const [editingEnterpriseObs, setEditingEnterpriseObs] = useState('');
+
   const [isSavingEnterprise, setIsSavingEnterprise] = useState(false);
 
   // NOVOS ESTADOS PARA BRANDING DOS EMPREENDIMENTOS NO CATÁLOGO
@@ -150,14 +159,28 @@ export default function DashboardView({
   }, [eventConfig]);
 
   const handleAddEnterprise = async () => {
-    if (!newEnterpriseName.trim() || !onSaveEnterprise) return;
+    if (!newEnterpriseName.trim()) {
+      alert("O nome do empreendimento é obrigatório.");
+      return;
+    }
+    if (!newEnterpriseStatus) {
+      alert("O status do empreendimento é obrigatório.");
+      return;
+    }
+    if (!newEnterpriseObs.trim()) {
+      alert("As observações do empreendimento são obrigatórias.");
+      return;
+    }
+    if (!onSaveEnterprise) return;
     setIsSavingEnterprise(true);
     const result = await onSaveEnterprise(
       null, 
       newEnterpriseName.trim(), 
       newEntLogoType, 
       newEntLogoUrl, 
-      newEntLogoIcon
+      newEntLogoIcon,
+      newEnterpriseStatus,
+      newEnterpriseObs.trim()
     );
     setIsSavingEnterprise(false);
     if (result.success) {
@@ -165,20 +188,36 @@ export default function DashboardView({
       setNewEntLogoType('ICON');
       setNewEntLogoUrl('');
       setNewEntLogoIcon('Building2');
+      setNewEnterpriseStatus('ATIVO');
+      setNewEnterpriseObs('');
     } else {
       alert(result.error || "Erro ao cadastrar empreendimento.");
     }
   };
 
   const handleUpdateEnterpriseLocal = async (id: string) => {
-    if (!editingEnterpriseName.trim() || !onSaveEnterprise) return;
+    if (!editingEnterpriseName.trim()) {
+      alert("O nome do empreendimento é obrigatório.");
+      return;
+    }
+    if (!editingEnterpriseStatus) {
+      alert("O status do empreendimento é obrigatório.");
+      return;
+    }
+    if (!editingEnterpriseObs.trim()) {
+      alert("As observações do empreendimento são obrigatórias.");
+      return;
+    }
+    if (!onSaveEnterprise) return;
     setIsSavingEnterprise(true);
     const result = await onSaveEnterprise(
       id, 
       editingEnterpriseName.trim(), 
       editingEntLogoType, 
       editingEntLogoUrl, 
-      editingEntLogoIcon
+      editingEntLogoIcon,
+      editingEnterpriseStatus,
+      editingEnterpriseObs.trim()
     );
     setIsSavingEnterprise(false);
     if (result.success) {
@@ -187,6 +226,8 @@ export default function DashboardView({
       setEditingEntLogoType('ICON');
       setEditingEntLogoUrl('');
       setEditingEntLogoIcon('Building2');
+      setEditingEnterpriseStatus('ATIVO');
+      setEditingEnterpriseObs('');
     } else {
       alert(result.error || "Erro ao editar empreendimento.");
     }
@@ -543,9 +584,9 @@ export default function DashboardView({
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
                   <h4 className="text-xxs font-bold text-slate-500 uppercase tracking-wider block">Cadastrar Novo Empreendimento com Identidade Visual</h4>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 block">Nome do Empreendimento</label>
+                      <label className="text-[10px] font-bold text-slate-500 block">Nome do Empreendimento <span className="text-rose-500">*</span></label>
                       <input
                         type="text"
                         placeholder="Ex: Splendor Park Residence II"
@@ -557,16 +598,41 @@ export default function DashboardView({
                     </div>
 
                     <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 block">Status <span className="text-rose-500">*</span></label>
+                      <select
+                        value={newEnterpriseStatus}
+                        onChange={(e: any) => setNewEnterpriseStatus(e.target.value)}
+                        disabled={isSavingEnterprise}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-slate-400 font-semibold"
+                      >
+                        <option value="ATIVO">🟢 Ativo</option>
+                        <option value="INATIVO">🔴 Inativo</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 block">Identidade Visual (Logo / Brasão)</label>
                       <select
                         value={newEntLogoType}
                         onChange={(e: any) => setNewEntLogoType(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-slate-400"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-slate-400 font-medium"
                       >
                         <option value="ICON">Usar Ícone Residencial Padrão</option>
                         <option value="URL">Anexar/Carregar Foto Logomarca</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 block">Observações do Empreendimento <span className="text-rose-500">*</span></label>
+                    <textarea
+                      rows={2}
+                      placeholder="Insira detalhes adicionais do empreendimento ou observações operacionais do condomínio..."
+                      value={newEnterpriseObs}
+                      onChange={(e) => setNewEnterpriseObs(e.target.value)}
+                      disabled={isSavingEnterprise}
+                      className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs focus:ring-1 focus:ring-slate-400 outline-none text-slate-800 resize-none font-medium"
+                    />
                   </div>
 
                   {newEntLogoType === 'ICON' ? (
@@ -625,7 +691,7 @@ export default function DashboardView({
                     <button
                       type="button"
                       onClick={handleAddEnterprise}
-                      disabled={isSavingEnterprise || !newEnterpriseName.trim()}
+                      disabled={isSavingEnterprise || !newEnterpriseName.trim() || !newEnterpriseObs.trim()}
                       className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white text-xxs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -634,43 +700,95 @@ export default function DashboardView({
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center text-xxs font-bold text-slate-505 uppercase tracking-wider font-mono">
-                    <span>Nome Cadastrado & Logo</span>
-                    <span>Ações</span>
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden space-y-3 p-3">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <h4 className="text-xxs font-bold text-slate-500 uppercase tracking-wider block">Listagem de Empreendimentos Cadastrados</h4>
                   </div>
 
-                  {enterprises.length === 0 ? (
-                    <div className="p-8 text-center text-xs text-slate-400 font-medium">
-                      Nenhum empreendimento cadastrado no catálogo. Insira um acima para iniciar.
+                  {/* Campo de pesquisa de empreendimentos */}
+                  <div className="relative flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Filtrar por nome, status ou observações..."
+                      value={entSearchQuery}
+                      onChange={(e) => setEntSearchQuery(e.target.value)}
+                      className="w-full bg-transparent border-none text-xs focus:ring-0 outline-none text-slate-800 placeholder-slate-400 font-medium"
+                    />
+                    {entSearchQuery && (
+                      <button 
+                        type="button" 
+                        onClick={() => setEntSearchQuery('')} 
+                        className="text-[10px] font-bold text-rose-500 hover:text-rose-750 px-1 hover:underline"
+                      >
+                        limpar
+                      </button>
+                    )}
+                  </div>
+
+                  {enterprises.filter(e => {
+                    const q = entSearchQuery.toLowerCase();
+                    return e.name.toLowerCase().includes(q) || 
+                           (e.status && e.status.toLowerCase().includes(q)) ||
+                           (e.observacoes && e.observacoes.toLowerCase().includes(q));
+                  }).length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 font-medium bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                      Nenhum empreendimento correspondente aos critérios de busca.
                     </div>
                   ) : (
-                    <div className="divide-y divide-slate-100 max-h-[220px] overflow-y-auto">
-                      {enterprises.map((e) => (
-                        <div key={e.id} className="px-4 py-2.5 flex flex-col gap-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors">
+                    <div className="divide-y divide-slate-150 max-h-[320px] overflow-y-auto rounded-lg border border-slate-100">
+                      {enterprises.filter(e => {
+                        const q = entSearchQuery.toLowerCase();
+                        return e.name.toLowerCase().includes(q) || 
+                               (e.status && e.status.toLowerCase().includes(q)) ||
+                               (e.observacoes && e.observacoes.toLowerCase().includes(q));
+                      }).map((e) => (
+                        <div key={e.id} className="px-4 py-3 flex flex-col gap-2 hover:bg-slate-50/60 transition-colors">
                           {editingEnterpriseId === e.id ? (
-                            <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-indigo-200">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-3 bg-indigo-50/20 p-3 rounded-lg border border-indigo-200">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-500 block">Editar Nome</label>
+                                  <label className="text-[10px] font-bold text-slate-500 block">Editar Nome <span className="text-rose-500">*</span></label>
                                   <input
                                     type="text"
                                     value={editingEnterpriseName}
                                     onChange={(e) => setEditingEnterpriseName(e.target.value)}
-                                    className="w-full bg-white border border-indigo-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-300 outline-none"
+                                    className="w-full bg-white border border-indigo-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-300 outline-none font-medium"
                                   />
                                 </div>
                                 <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 block">Editar Status <span className="text-rose-500">*</span></label>
+                                  <select
+                                    value={editingEnterpriseStatus}
+                                    onChange={(e: any) => setEditingEnterpriseStatus(e.target.value)}
+                                    className="w-full bg-white border border-indigo-300 rounded px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-300 font-semibold"
+                                  >
+                                    <option value="ATIVO">🟢 Ativo</option>
+                                    <option value="INATIVO">🔴 Inativo</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-1 font-medium">
                                   <label className="text-[10px] font-bold text-slate-500 block">Editar Logo Tipo</label>
                                   <select
                                     value={editingEntLogoType}
                                     onChange={(e: any) => setEditingEntLogoType(e.target.value)}
-                                    className="w-full bg-white border border-indigo-300 rounded px-2.5 py-1 text-xs outline-none"
+                                    className="w-full bg-white border border-indigo-300 rounded px-2.5 py-1 text-xs outline-none font-semibold"
                                   >
                                     <option value="ICON">Usar Ícone Residencial Padrão</option>
                                     <option value="URL">Anexar/Carregar Foto Logomarca</option>
                                   </select>
                                 </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 block">Editar Observações <span className="text-rose-500">*</span></label>
+                                <textarea
+                                  rows={2}
+                                  value={editingEnterpriseObs}
+                                  onChange={(e) => setEditingEnterpriseObs(e.target.value)}
+                                  placeholder="Digite observações detalhadas do empreendimento..."
+                                  className="w-full bg-white border border-indigo-300 rounded-lg p-2 text-xs focus:ring-1 focus:ring-indigo-300 outline-none resize-none font-medium text-slate-800"
+                                />
                               </div>
 
                               {editingEntLogoType === 'ICON' ? (
@@ -721,10 +839,10 @@ export default function DashboardView({
                                 <button
                                   type="button"
                                   onClick={() => handleUpdateEnterpriseLocal(e.id)}
-                                  disabled={isSavingEnterprise || !editingEnterpriseName.trim()}
+                                  disabled={isSavingEnterprise || !editingEnterpriseName.trim() || !editingEnterpriseObs.trim()}
                                   className="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-3 py-1.5 text-[10px] font-bold cursor-pointer font-sans"
                                 >
-                                  Gravar Identidade
+                                  Gravar Empreendimento
                                 </button>
                                 <button
                                   type="button"
@@ -736,18 +854,35 @@ export default function DashboardView({
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <div className="h-7 w-7 rounded bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
-                                  {e.logoType === 'URL' && e.logoUrl ? (
-                                    <img src={e.logoUrl} className="h-full w-full object-contain" alt="Logo" referrerPolicy="no-referrer" />
-                                  ) : (
-                                    <Building2 className="w-4 h-4 text-indigo-500" />
-                                  )}
+                            <div className="flex items-start justify-between gap-4 p-1">
+                              <div className="flex-1 min-w-0 space-y-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="h-7 w-7 rounded bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                                    {e.logoType === 'URL' && e.logoUrl ? (
+                                      <img src={e.logoUrl} className="h-full w-full object-contain" alt="Logo" referrerPolicy="no-referrer" />
+                                    ) : (
+                                      <Building2 className="w-4 h-4 text-indigo-500" />
+                                    )}
+                                  </div>
+                                  <span className="truncate font-bold text-slate-800 text-sm">{e.name}</span>
+                                  <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full uppercase ${
+                                    e.status === 'INATIVO' 
+                                      ? 'bg-rose-50 text-rose-700 border border-rose-150' 
+                                      : 'bg-emerald-50 text-emerald-700 border border-emerald-150'
+                                  }`}>
+                                    {e.status === 'INATIVO' ? '🔴 Inativo' : '🟢 Ativo'}
+                                  </span>
                                 </div>
-                                <span className="truncate pr-4 font-semibold text-slate-705 text-slate-700">{e.name}</span>
+                                {e.observacoes ? (
+                                  <div className="bg-slate-50 p-2 rounded-lg text-xxs text-slate-600 font-normal leading-relaxed">
+                                    <strong className="text-slate-500 uppercase font-mono tracking-wider font-bold">Observações: </strong>
+                                    {e.observacoes}
+                                  </div>
+                                ) : (
+                                  <span className="text-xxs text-slate-400 block italic">Nenhuma observação cadastrada.</span>
+                                )}
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -756,16 +891,18 @@ export default function DashboardView({
                                     setEditingEntLogoType(e.logoType || 'ICON');
                                     setEditingEntLogoUrl(e.logoUrl || '');
                                     setEditingEntLogoIcon(e.logoIconName || 'Building2');
+                                    setEditingEnterpriseStatus(e.status || 'ATIVO');
+                                    setEditingEnterpriseObs(e.observacoes || '');
                                   }}
-                                  className="p-1 hover:bg-slate-100/80 rounded text-slate-600 hover:text-indigo-600 cursor-pointer"
-                                  title="Editar Nome do Empreendimento"
+                                  className="p-1.5 bg-slate-105 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 cursor-pointer border border-slate-200"
+                                  title="Editar Empreendimento"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteEnterpriseLocal(e.id)}
-                                  className="p-1 hover:bg-slate-100/80 rounded text-rose-600 hover:text-rose-750 cursor-pointer"
+                                  className="p-1.5 bg-slate-105 hover:bg-slate-100 rounded text-rose-600 hover:text-rose-705 cursor-pointer border border-slate-200"
                                   title="Excluir do Catálogo"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />

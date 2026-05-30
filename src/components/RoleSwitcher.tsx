@@ -7,6 +7,7 @@ interface RoleSwitcherProps {
   onSelectUser: (user: User | null, isPublicPortal?: boolean, publicClientId?: string) => void;
   onResetDatabase: () => void;
   isResetting: boolean;
+  onLogout?: () => void;
 }
 
 export default function RoleSwitcher({
@@ -14,7 +15,8 @@ export default function RoleSwitcher({
   allUsers,
   onSelectUser,
   onResetDatabase,
-  isResetting
+  isResetting,
+  onLogout
 }: RoleSwitcherProps) {
   return (
     <div className="bg-slate-900 border-b border-slate-800 text-white text-xs py-2 px-4 shadow-md sm:flex items-center justify-between sticky top-0 z-50">
@@ -132,6 +134,17 @@ export default function RoleSwitcher({
         >
           {isResetting ? 'Limpando...' : 'Zerar Cenário'}
         </button>
+
+        {currentUser && (
+          <button
+            onClick={() => {
+              if (onLogout) onLogout();
+            }}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xxxs font-semibold px-2.5 py-1.5 rounded transition-all cursor-pointer border border-slate-705 shrink-0"
+          >
+            Sair (Logoff)
+          </button>
+        )}
       </div>
     </div>
   );

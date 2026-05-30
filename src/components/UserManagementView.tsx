@@ -30,6 +30,9 @@ export default function UserManagementView({
   const [username, setUsername] = useState('');
   const [role, setRole] = useState<UserType>('ATENDENTE');
   const [deskNumber, setDeskNumber] = useState('');
+  const [password, setPassword] = useState('');
+  const [disabled, setDisabled] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -40,6 +43,9 @@ export default function UserManagementView({
     setUsername('');
     setRole('ATENDENTE');
     setDeskNumber('');
+    setPassword('');
+    setDisabled(false);
+    setShowPassword(false);
     setErrorMsg('');
     setSuccessMsg('');
     setIsFormOpen(true);
@@ -51,6 +57,9 @@ export default function UserManagementView({
     setUsername(user.username);
     setRole(user.role);
     setDeskNumber(user.deskNumber || '');
+    setPassword(user.password || '');
+    setDisabled(user.disabled || false);
+    setShowPassword(false);
     setErrorMsg('');
     setSuccessMsg('');
     setIsFormOpen(true);
@@ -70,7 +79,9 @@ export default function UserManagementView({
       name: name.trim(),
       username: username.trim().toLowerCase(),
       role,
-      deskNumber: (role === 'ATENDENTE' || role === 'VISTORIADOR') ? deskNumber.trim() : undefined
+      deskNumber: (role === 'ATENDENTE' || role === 'VISTORIADOR') ? deskNumber.trim() : undefined,
+      password: password.trim(),
+      disabled
     };
 
     if (editingUser) {
@@ -384,6 +395,41 @@ export default function UserManagementView({
                     </span>
                   </div>
                 )}
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">Senha de Acesso Individual</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder={editingUser ? 'Manter ou digitar nova senha...' : 'Defina uma senha individual...'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-gray-250 rounded-lg p-2 pr-9 focus:outline-none focus:ring-1 focus:ring-indigo-550 focus:bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-gray-400 block leading-normal mt-0.5">
+                    Se deixado vazio, a senha padrão será o próprio nome de usuário (@username).
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">Status de Acesso à Plataforma</label>
+                  <select
+                    value={disabled ? 'INATIVO' : 'ATIVO'}
+                    onChange={(e) => setDisabled(e.target.value === 'INATIVO')}
+                    className="w-full bg-slate-50 border border-gray-250 rounded-lg p-2"
+                  >
+                    <option value="ATIVO">🟢 Ativo (Acesso Liberado)</option>
+                    <option value="INATIVO">🔴 Inabilitado (Bloquear Login)</option>
+                  </select>
+                </div>
 
                 <div className="flex gap-2 pt-2">
                   <button

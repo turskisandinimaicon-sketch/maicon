@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Client, AuditLog, WhatsappMessage, CallLog, OperationalAlert, PriorityType, EventConfig, Enterprise } from './types';
 import RoleSwitcher from './components/RoleSwitcher';
+import LoginView from './components/LoginView';
 import DashboardView from './components/DashboardView';
 import RecepcaoView from './components/RecepcaoView';
 import AtendimentoView from './components/AtendimentoView';
@@ -27,23 +28,37 @@ export default function App() {
     eventDate: "23 de Maio de 2026"
   });
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  
-  // Perfil Ativo Simulado no workspace (Começamos como Admin por padrão para dar o wow-factor)
-  const [currentUser, setCurrentUser] = useState<User | null>({
-    id: "u-1",
-    name: "Bruno Reis",
-    role: "ADMIN",
-    username: "bruno.admin",
-    status: "ONLINE",
-    completedCount: 22
+  // Perfil Ativo com Persistência em Sessão (Sessão Segura)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const persisted = localStorage.getItem("canto_flores_session");
+      if (persisted) {
+        return JSON.parse(persisted);
+      }
+    } catch (e) {
+      console.warn("Erro ao ler sessão local:", e);
+    }
+    return null;
   });
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem("canto_flores_session") !== null;
+  });
+
+  const [showTvWithoutAuth, setShowTvWithoutAuth] = useState(false);
   const [isPublicPortal, setIsPublicPortal] = useState(false);
   const [publicActiveClientId, setPublicActiveClientId] = useState<string>('c-9');
   const [isResetting, setIsResetting] = useState(false);
-  const [isInitialLoadDone, setIsInitialLoadDone] = useState(true);
 
   // Navegação dentro do painel do Admin
   const [adminTab, setAdminTab] = useState<'DASHBOARD' | 'IMPORT' | 'USER_MANAGEMENT' | 'AUDIT_LOGS'>('DASHBOARD');
+
+  // Estados dos inputs de Login individual
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginShowPass, setLoginShowPass] = useState(false);
 
   // Carregar dados de forma consolidada do servidor Node/Express
   const fetchAllData = async () => {
@@ -64,6 +79,7 @@ export default function App() {
                 const freshUser = uData.find((u: any) => u.id === currentUser.id);
                 if (freshUser) {
                   setCurrentUser(freshUser);
+                  localStorage.setItem("canto_flores_session", JSON.stringify(freshUser));
                 }
               }
             }
@@ -114,26 +130,74 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
-  // Carregar operador inicial padrão
-  useEffect(() => {
-    if (users.length > 0 && !isInitialLoadDone && !isPublicPortal) {
-      // Começa logado como o Administrador primário
-      const adminUser = users.find(u => u.role === 'ADMIN');
-      if (adminUser) {
-        setCurrentUser(adminUser);
-        setIsInitialLoadDone(true);
+  // Rotina de Login via API Backend (Sessão Segura)
+  const performLogin = async (usernameVal: string, passwordVal: string) => {
+    setLoginLoading(true);
+    setLoginError("");
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: usernameVal, password: passwordVal })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        localStorage.setItem("canto_flores_session", JSON.stringify(data.user));
+        setCurrentUser(data.user);
+        setIsLoggedIn(true);
+        setShowTvWithoutAuth(false);
+        setIsPublicPortal(false);
+        setLoginUsername("");
+        setLoginPassword("");
+      } else {
+        setLoginError(data.error || "Acesso negado. Credenciais inválidas.");
       }
+    } catch (e) {
+      console.error(e);
+      setLoginError("Erro de comunicação com o servidor. Tente novamente.");
+    } finally {
+      setLoginLoading(false);
     }
-  }, [users, isInitialLoadDone, isPublicPortal]);
+  };
 
-  // Função Switch perfil
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginUsername.trim() || !loginPassword.trim()) {
+      setLoginError("Por favor, informe seu usuário (@) e senha de acesso.");
+      return;
+    }
+    performLogin(loginUsername, loginPassword);
+  };
+
+  // Logout e Limpeza de Sessão
+  const handleLogout = () => {
+    localStorage.removeItem("canto_flores_session");
+    setCurrentUser(null);
+    setIsLoggedIn(false);
+    setShowTvWithoutAuth(false);
+    setIsPublicPortal(false);
+  };
+
+  // Função Switch perfil / Simulador Operacional
   const handleSelectUser = (user: User | null, isPublic: boolean = false, publicClientId?: string) => {
     setIsPublicPortal(isPublic);
     if (isPublic) {
-      setCurrentUser({ id: 'public-portal', name: 'Portal Público', role: 'ADMIN', username: 'portal', status: 'ONLINE', completedCount: 0 });
+      const portalUser = { id: 'public-portal', name: 'Portal Público', role: 'ADMIN' as const, username: 'portal', status: 'ONLINE' as const, completedCount: 0 };
+      setCurrentUser(portalUser);
+      setIsLoggedIn(true);
+      setShowTvWithoutAuth(false);
+      localStorage.setItem("canto_flores_session", JSON.stringify(portalUser));
       if (publicClientId) setPublicActiveClientId(publicClientId);
+    } else if (user === null) {
+      setCurrentUser(null);
+      setIsLoggedIn(false);
+      setShowTvWithoutAuth(true);
+      localStorage.removeItem("canto_flores_session");
     } else {
       setCurrentUser(user);
+      setIsLoggedIn(true);
+      setShowTvWithoutAuth(false);
+      localStorage.setItem("canto_flores_session", JSON.stringify(user));
     }
   };
 
@@ -214,13 +278,15 @@ export default function App() {
     name: string, 
     logoType?: 'ICON' | 'URL', 
     logoUrl?: string, 
-    logoIconName?: string
+    logoIconName?: string,
+    status?: 'ATIVO' | 'INATIVO',
+    observacoes?: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await fetch('/api/enterprises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name, logoType, logoUrl, logoIconName })
+        body: JSON.stringify({ id, name, logoType, logoUrl, logoIconName, status, observacoes })
       });
       
       let errorMessage = 'Ocorreu um erro ao salvar o empreendimento.';
@@ -474,6 +540,7 @@ export default function App() {
         onSelectUser={handleSelectUser}
         onResetDatabase={handleResetDatabase}
         isResetting={isResetting}
+        onLogout={handleLogout}
       />
 
       {/* Renderização Condicional com Base no Perfil Ativo */}
@@ -485,14 +552,41 @@ export default function App() {
             initialClientId={publicActiveClientId}
             onUploadLaudo={handleUploadDoc}
           />
-        ) : currentUser === null ? (
-          /* PAINEL DE CHAMADAS TV */
-          <TvPanelView
-            activeCalls={activeCalls}
-            clients={clients}
-            eventConfig={eventConfig}
+        ) : !isLoggedIn && showTvWithoutAuth && currentUser === null ? (
+          /* PAINEL DE CHAMADAS TV (Sem login obrigatório quando acessado diretamente) */
+          <div className="relative">
+            <div className="bg-indigo-905 bg-slate-900 border-b border-slate-800 text-indigo-300 p-2 text-center text-xxs font-semibold flex items-center justify-center gap-4">
+              <span>🖥️ Painel Digital de Chamadas da TV (Modo de Exibição Pública)</span>
+              <button 
+                onClick={handleLogout}
+                className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold px-3 py-1 rounded text-xxxs cursor-pointer tracking-wider"
+              >
+                Voltar à Tela de Login
+              </button>
+            </div>
+            <TvPanelView
+              activeCalls={activeCalls}
+              clients={clients}
+              eventConfig={eventConfig}
+            />
+          </div>
+        ) : !isLoggedIn ? (
+          /* TELA DE LOGIN CORPORATIVO DA CONSTRUTORA */
+          <LoginView
+            allUsers={users}
+            onLogin={performLogin}
+            onSelectTvPanel={() => {
+              setCurrentUser(null);
+              setIsLoggedIn(false);
+              setShowTvWithoutAuth(true);
+            }}
+            onSelectCustomerPortal={() => {
+              handleSelectUser(null, true);
+            }}
+            isLoading={loginLoading}
+            errorMsg={loginError}
           />
-        ) : currentUser.role === 'ADMIN' ? (
+        ) : currentUser?.role === 'ADMIN' ? (
           /* COCKPIT DO ADMINISTRADOR */
           <div className="flex-1 flex flex-col">
             <div className="bg-white border-b border-gray-150 sticky top-12 z-35 shadow-xxs">

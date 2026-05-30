@@ -8,6 +8,8 @@ export interface User {
   deskNumber?: string; // Guichê para atendente, ou identificação de vistoriador
   status: 'ONLINE' | 'OFFLINE' | 'DISPONIVEL' | 'INDISPONIVEL' | 'EM_ATENDIMENTO' | 'EM_VISTORIA';
   completedCount: number;
+  password?: string;
+  disabled?: boolean;
 }
 
 export type PriorityType = 'NORMAL' | 'IDOSO' | 'PCD' | 'GESTANTE';
@@ -147,5 +149,7 @@ export interface Enterprise {
   logoType?: 'ICON' | 'URL';
   logoUrl?: string;
   logoIconName?: string;
+  status?: 'ATIVO' | 'INATIVO';
+  observacoes?: string;
 }
 
