@@ -62,11 +62,14 @@ let lastSyncTime = 0;
 const SYNC_THROTTLE_MS = 2000; // Synchronize at most once every 2 seconds
 
 // Function to pull all data from Firestore, or push defaults if collections are empty
-async function syncFromFirestore() {
+async function syncFromFirestore(force = false) {
   if (!useFirebase || !db) return;
+  if (firstSyncCompleted && !force) {
+    return;
+  }
   
   try {
-    console.log("[FIREBASE] Sincronizando dados com o Firestore...");
+    console.log("[FIREBASE] Sincronizando dados com o Firestore... (forçado: " + force + ")");
     
     // 1. Sync EventConfig
     const configDocRef = doc(db, "eventConfig", "config");
@@ -165,7 +168,7 @@ async function ensureSynced() {
   const now = Date.now();
   if (now - lastSyncTime > SYNC_THROTTLE_MS) {
     try {
-      await syncFromFirestore();
+      await syncFromFirestore(true);
       lastSyncTime = Date.now();
     } catch (e) {
       console.warn("[FIREBASE] Throttled sync error in ensureSynced:", e);
@@ -765,7 +768,12 @@ app.get("/api/enterprises", async (req, res) => {
 app.post("/api/enterprises", async (req, res) => {
   try {
     await ensureSynced();
-    const { id, name, logoType, logoUrl, logoIconName, status, observacoes } = req.body;
+    const { 
+      id, name, logoType, logoUrl, logoIconName, status, observacoes,
+      address, telephone, email,
+      primaryColor, secondaryColor, accentColor, textColor,
+      layoutType, fontSize, showLogo, institutionalText, tickerText
+    } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Nome do empreendimento é obrigatório." });
     }
@@ -785,6 +793,23 @@ app.post("/api/enterprises", async (req, res) => {
       enterprise.logoIconName = logoIconName || enterprise.logoIconName || 'Building2';
       enterprise.status = status || enterprise.status || 'ATIVO';
       enterprise.observacoes = observacoes !== undefined ? observacoes : enterprise.observacoes;
+      
+      // Update new contact fields:
+      enterprise.address = address !== undefined ? address : enterprise.address;
+      enterprise.telephone = telephone !== undefined ? telephone : enterprise.telephone;
+      enterprise.email = email !== undefined ? email : enterprise.email;
+      
+      // Update TV colors and layout settings:
+      enterprise.primaryColor = primaryColor !== undefined ? primaryColor : enterprise.primaryColor;
+      enterprise.secondaryColor = secondaryColor !== undefined ? secondaryColor : enterprise.secondaryColor;
+      enterprise.accentColor = accentColor !== undefined ? accentColor : enterprise.accentColor;
+      enterprise.textColor = textColor !== undefined ? textColor : enterprise.textColor;
+      enterprise.layoutType = layoutType !== undefined ? layoutType : enterprise.layoutType;
+      enterprise.fontSize = fontSize !== undefined ? fontSize : enterprise.fontSize;
+      enterprise.showLogo = showLogo !== undefined ? !!showLogo : enterprise.showLogo;
+      enterprise.institutionalText = institutionalText !== undefined ? institutionalText : enterprise.institutionalText;
+      enterprise.tickerText = tickerText !== undefined ? tickerText : enterprise.tickerText;
+
       await saveEnterprise(enterprise);
 
       // Renomear em cascata nos compradores ativos
@@ -819,7 +844,19 @@ app.post("/api/enterprises", async (req, res) => {
         logoUrl: logoUrl || '',
         logoIconName: logoIconName || 'Building2',
         status: status || 'ATIVO',
-        observacoes: observacoes || ''
+        observacoes: observacoes || '',
+        address: address || '',
+        telephone: telephone || '',
+        email: email || '',
+        primaryColor: primaryColor || '#0f172a',
+        secondaryColor: secondaryColor || '#1e293b',
+        accentColor: accentColor || '#e11d48',
+        textColor: textColor || '#ffffff',
+        layoutType: layoutType || 'TOP_LOGO',
+        fontSize: fontSize || 'MEDIUM',
+        showLogo: showLogo !== undefined ? !!showLogo : true,
+        institutionalText: institutionalText || '',
+        tickerText: tickerText || 'Seja bem-vindo ao evento de chaves!'
       };
       enterprises.push(newEnt);
       await saveEnterprise(newEnt);
@@ -914,6 +951,121 @@ app.get("/api/sheets/config", async (req, res) => {
 app.get("/api/clients", async (req, res) => {
   await ensureSynced();
   res.json(clients);
+});
+
+// Cadastrar/Editar cliente manualmente
+app.post("/api/clients", async (req, res) => {
+  try {
+    await ensureSynced();
+    const { 
+      id, nome, cpf, empreendimento, bloco, unidade, telefone, email, 
+      statusContratual, status, priority, observacoes, possuiProcurador, 
+      procuradorNome, procuradorCpf, possuiVistoriadorProprio, 
+      vistoriadorParticularNome, vistoriadorParticularCrea
+    } = req.body;
+    
+    if (!nome || !nome.trim() || !cpf || !cpf.trim()) {
+      return res.status(400).json({ error: "Nome e CPF são campos obrigatórios." });
+    }
+
+    const cleanCpf = cpf.replace(/\D/g, '');
+
+    if (id) {
+      // Editar cliente existente
+      const clientObj = clients.find(c => c.id === id);
+      if (!clientObj) {
+        return res.status(404).json({ error: "Cliente não encontrado para edição." });
+      }
+
+      clientObj.nome = nome.trim();
+      clientObj.cpf = cpf.trim();
+      clientObj.empreendimento = empreendimento || "Residencial Canto das Flores";
+      clientObj.bloco = bloco || "Bloco A";
+      clientObj.unidade = unidade || "Unidade Geral";
+      clientObj.telefone = telefone || "";
+      clientObj.email = email || "";
+      clientObj.statusContratual = statusContratual || "QUITADO";
+      clientObj.status = status || "AGUARDANDO_RECEPCAO";
+      clientObj.priority = priority || "NORMAL";
+      clientObj.observacoes = observacoes !== undefined ? observacoes.trim() : clientObj.observacoes;
+      clientObj.possuiProcurador = possuiProcurador !== undefined ? !!possuiProcurador : clientObj.possuiProcurador;
+      clientObj.procuradorNome = procuradorNome !== undefined ? procuradorNome : clientObj.procuradorNome;
+      clientObj.procuradorCpf = procuradorCpf !== undefined ? procuradorCpf : clientObj.procuradorCpf;
+      clientObj.possuiVistoriadorProprio = possuiVistoriadorProprio !== undefined ? !!possuiVistoriadorProprio : clientObj.possuiVistoriadorProprio;
+      clientObj.vistoriadorParticularNome = vistoriadorParticularNome !== undefined ? vistoriadorParticularNome : clientObj.vistoriadorParticularNome;
+      clientObj.vistoriadorParticularCrea = vistoriadorParticularCrea !== undefined ? vistoriadorParticularCrea : clientObj.vistoriadorParticularCrea;
+
+      await saveClient(clientObj);
+      logAction("Administrador", "ADMIN", "Cliente editado", `Cadastro do cliente "${nome}" alterado manualmente.`);
+      res.json({ success: true, clients });
+    } else {
+      // Criar novo cliente
+      const isDuplicated = clients.some(c => c.cpf.replace(/\D/g, '') === cleanCpf);
+      if (isDuplicated) {
+        return res.status(400).json({ error: "Já existe um comprador cadastrado com este CPF." });
+      }
+
+      const newClient: Client = {
+        id: "c-" + generateId(),
+        nome: nome.trim(),
+        cpf: cpf.trim(),
+        empreendimento: empreendimento || "Residencial Canto das Flores",
+        bloco: bloco || "Bloco A",
+        unidade: unidade || "Unidade Geral",
+        telefone: telefone || "",
+        email: email || "",
+        statusContratual: statusContratual || "QUITADO",
+        status: status || "AGUARDANDO_RECEPCAO",
+        priority: priority || "NORMAL",
+        possuiProcurador: !!possuiProcurador,
+        procuradorNome: procuradorNome || "",
+        procuradorCpf: procuradorCpf || "",
+        possuiVistoriadorProprio: !!possuiVistoriadorProprio,
+        vistoriadorParticularNome: vistoriadorParticularNome || "",
+        vistoriadorParticularCrea: vistoriadorParticularCrea || "",
+        liberadoParaVistoria: false,
+        documentos: [],
+        observacoes: observacoes ? observacoes.trim() : ""
+      };
+
+      clients.push(newClient);
+      await saveClient(newClient);
+      logAction("Administrador", "ADMIN", "Cliente criado", `Novo cliente "${nome}" cadastrado com sucesso.`);
+      res.json({ success: true, clients });
+    }
+  } catch (err: any) {
+    console.error("Erro em POST /api/clients:", err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Excluir cliente
+app.delete("/api/clients/:id", async (req, res) => {
+  try {
+    await ensureSynced();
+    const { id } = req.params;
+    const clientIndex = clients.findIndex(c => c.id === id);
+    if (clientIndex !== -1) {
+      const clientName = clients[clientIndex].nome;
+      clients.splice(clientIndex, 1);
+      
+      if (useFirebase && db) {
+        try {
+          await deleteDoc(doc(db, "clients", id));
+        } catch (err) {
+          console.error("Erro ao deletar documento no Firestore:", err);
+        }
+      }
+      saveLocalBackup();
+      logAction("Administrador", "ADMIN", "Cliente removido", `Cliente "${clientName}" excluído do sistema.`);
+      res.json({ success: true, clients });
+    } else {
+      res.status(404).json({ error: "Cliente não encontrado para exclusão." });
+    }
+  } catch (err: any) {
+    console.error("Erro em DELETE /api/clients:", err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
 });
 
 // Reset para fins de demonstração (Recarrega dados originais)

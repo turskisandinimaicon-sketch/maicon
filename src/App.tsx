@@ -272,24 +272,78 @@ export default function App() {
     }
   };
 
-  // Criar ou Editar Empreendimento do Catálogo
+  // Criar ou Editar Empreendimento do Catálogo (com suporte a todas configurações e cores da TV)
   const handleSaveEnterprise = async (
-    id: string | null, 
-    name: string, 
-    logoType?: 'ICON' | 'URL', 
-    logoUrl?: string, 
-    logoIconName?: string,
-    status?: 'ATIVO' | 'INATIVO',
-    observacoes?: string
+    enterpriseData: Partial<Enterprise>
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await fetch('/api/enterprises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name, logoType, logoUrl, logoIconName, status, observacoes })
+        body: JSON.stringify(enterpriseData)
       });
       
       let errorMessage = 'Ocorreu um erro ao salvar o empreendimento.';
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        errorMessage = data.error || errorMessage;
+      } else {
+        const textText = await response.text();
+        errorMessage = `Retorno do Servidor (${response.status}): ${textText.substring(0, 150)}`;
+      }
+
+      if (response.ok) {
+        await fetchAllData();
+        return { success: true };
+      }
+      return { success: false, error: errorMessage };
+    } catch (e: any) {
+      console.error(e);
+      return { success: false, error: e.message || 'Erro de conexão com o servidor.' };
+    }
+  };
+
+  // Criar ou Editar Cliente (Manual)
+  const handleSaveClient = async (
+    clientData: Partial<Client>
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clientData)
+      });
+      
+      let errorMessage = 'Ocorreu um erro ao salvar o cadastro de cliente.';
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        errorMessage = data.error || errorMessage;
+      } else {
+        const textText = await response.text();
+        errorMessage = `Retorno do Servidor (${response.status}): ${textText.substring(0, 150)}`;
+      }
+
+      if (response.ok) {
+        await fetchAllData();
+        return { success: true };
+      }
+      return { success: false, error: errorMessage };
+    } catch (e: any) {
+      console.error(e);
+      return { success: false, error: e.message || 'Erro de conexão com o servidor.' };
+    }
+  };
+
+  // Excluir Cliente do Cadastro
+  const handleDeleteClient = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/clients/${id}`, {
+        method: 'DELETE'
+      });
+      
+      let errorMessage = 'Erro ao deletar o cadastro do cliente.';
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
@@ -654,6 +708,8 @@ export default function App() {
                   enterprises={enterprises}
                   onSaveEnterprise={handleSaveEnterprise}
                   onDeleteEnterprise={handleDeleteEnterprise}
+                  onSaveClient={handleSaveClient}
+                  onDeleteClient={handleDeleteClient}
                 />
               )}
               {adminTab === 'IMPORT' && (

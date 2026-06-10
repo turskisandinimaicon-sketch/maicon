@@ -151,5 +151,21 @@ export interface Enterprise {
   logoIconName?: string;
   status?: 'ATIVO' | 'INATIVO';
   observacoes?: string;
+  
+  // Informações de Contato do Imóvel / Condomínio
+  address?: string;
+  telephone?: string;
+  email?: string;
+
+  // Customizações do Painel de TV por Empreendimento
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  textColor?: string;
+  layoutType?: 'TOP_LOGO' | 'SIDE_LOGO' | 'NO_LOGO';
+  fontSize?: 'SMALL' | 'MEDIUM' | 'LARGE';
+  showLogo?: boolean;
+  institutionalText?: string;
+  tickerText?: string;
 }
 
